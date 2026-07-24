@@ -145,44 +145,6 @@
     border-color: #ced4da;
     color: #495057;
   }
-
-  .accordion-toggle {
-    width: 100%;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text);
-    padding: 14px 16px;
-    margin-bottom: 12px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    transition: background 0.15s ease, border-color 0.15s ease;
-  }
-  .accordion-toggle:hover { background: #f8f9fa; border-color: #b0b8c1; }
-  .accordion-toggle .arrow {
-    font-size: 12px;
-    transition: transform 0.2s ease;
-    margin-left: 8px;
-    color: var(--muted);
-  }
-  .accordion-toggle.active .arrow {
-    transform: rotate(180deg);
-  }
-
-  #manual-add-section {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 16px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-  }
-
   #quiz-screen { display: none; }
   .progress-bar-outer {
     width: 100%;
@@ -278,32 +240,6 @@
       </div>
       <div class="q-label">クイズセットを選ぶ</div>
       <div id="quiz-sets-list"></div>
-    </div>
-
-    <button id="manual-add-toggle" class="accordion-toggle">
-      <span id="manual-add-label">＋ 自分でクイズを追加する（JSON貼り付け／ファイル選択）</span>
-      <span class="arrow">▼</span>
-    </button>
-
-    <div id="manual-add-section" style="display:none;">
-      <div class="dropzone" id="dropzone">
-        <p>.json ファイルをここにドラッグ&amp;ドロップ、または</p>
-        <button id="file-select-btn">ファイルを選択</button>
-        <input type="file" id="file-input" accept=".json,application/json" style="display:none;">
-        <div class="filename" id="dropzone-filename"></div>
-      </div>
-
-      <p style="font-size:14px; color:var(--muted); margin-top:0;">
-        または下のテキストエリアに <code>question</code> と <code>answer</code> を持つJSON配列を直接貼り付けて「クイズ開始」を押してください。
-      </p>
-      <textarea id="json-input">[
-  { "question": "日本の首都は？", "answer": "東京" },
-  { "question": "富士山がある都道府県は？（2つのうち1つ）", "answer": "静岡県・山梨県" },
-  { "question": "1年は何日？（うるう年を除く）", "answer": "365日" }
-]</textarea>
-      <div class="row">
-        <button class="primary full-width" id="start-btn">クイズ開始</button>
-      </div>
     </div>
 
     <div id="error"></div>
@@ -640,42 +576,6 @@ document.getElementById('answer-mode-toggle').addEventListener('click', () => {
   updateAnswerModeToggle();
 });
 
-document.getElementById('manual-add-toggle').addEventListener('click', () => {
-  const section = document.getElementById('manual-add-section');
-  const btn = document.getElementById('manual-add-toggle');
-  const label = document.getElementById('manual-add-label');
-  const isHidden = section.style.display === 'none';
-  section.style.display = isHidden ? 'block' : 'none';
-  btn.classList.toggle('active', isHidden);
-  if (label) {
-    label.textContent = isHidden
-      ? '− 自分でクイズを追加する（JSON貼り付け／ファイル選択）'
-      : '＋ 自分でクイズを追加する（JSON貼り付け／ファイル選択）';
-  }
-});
-
-function startQuizFromText(jsonText) {
-  errorBox.textContent = '';
-  let data;
-  try {
-    data = JSON.parse(jsonText);
-  } catch (e) {
-    errorBox.textContent = 'JSONの形式が正しくありません:\n' + e.message;
-    return false;
-  }
-  if (!Array.isArray(data) || data.length === 0) {
-    errorBox.textContent = 'JSONは question と answer を持つオブジェクトの配列にしてください。';
-    return false;
-  }
-  for (const item of data) {
-    if (typeof item.question !== 'string' || typeof item.answer !== 'string') {
-      errorBox.textContent = '各要素に question と answer（文字列）が必要です。';
-      return false;
-    }
-  }
-  return startQuizFromArray(data);
-}
-
 function startQuizFromArray(data) {
   quiz = data;
   order = quiz.map((_, i) => i);
@@ -697,63 +597,6 @@ function startQuizFromArray(data) {
   saveProgress();
   return true;
 }
-
-document.getElementById('start-btn').addEventListener('click', () => {
-  currentQuizId = null;
-  startQuizFromText(document.getElementById('json-input').value);
-});
-
-function loadJsonFile(file) {
-  const dzName = document.getElementById('dropzone-filename');
-  errorBox.textContent = '';
-  if (!file) return;
-  if (!/\.json$/i.test(file.name)) {
-    errorBox.textContent = '.json ファイルを選択してください。';
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
-    currentQuizId = null;
-    document.getElementById('json-input').value = reader.result;
-    dzName.textContent = '読み込み済み: ' + file.name;
-    startQuizFromText(reader.result);
-  };
-  reader.onerror = () => {
-    errorBox.textContent = 'ファイルの読み込みに失敗しました。';
-  };
-  reader.readAsText(file);
-}
-
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('file-input');
-
-document.getElementById('file-select-btn').addEventListener('click', () => {
-  fileInput.click();
-});
-fileInput.addEventListener('change', () => {
-  if (fileInput.files && fileInput.files[0]) {
-    loadJsonFile(fileInput.files[0]);
-  }
-});
-
-['dragenter', 'dragover'].forEach(evt => {
-  dropzone.addEventListener(evt, (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dropzone.classList.add('dragover');
-  });
-});
-['dragleave', 'dragend', 'drop'].forEach(evt => {
-  dropzone.addEventListener(evt, (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dropzone.classList.remove('dragover');
-  });
-});
-dropzone.addEventListener('drop', (e) => {
-  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (file) loadJsonFile(file);
-});
 
 function renderQuestion() {
   const item = quiz[order[idx]];
