@@ -107,6 +107,65 @@
     font-weight: bold;
     font-size: 12px;
   }
+
+  .ip-group-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  }
+  .ip-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .ip-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .ip-title code {
+    background: #e8f5e9;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-family: SFMono-Regular, Consolas, monospace;
+    color: var(--accent-dark);
+  }
+  .ip-stats-grid {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    margin-top: 6px;
+  }
+  .ip-stat-item {
+    background: #f8f9fa;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+  }
+  .ip-stat-item strong { color: var(--accent-dark); }
+  .view-mode-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    cursor: pointer;
+  }
+  .view-mode-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent-dark);
+    font-weight: bold;
+  }
 </style>
 </head>
 <body>
@@ -134,28 +193,16 @@
     </div>
 
     <h2>ユーザー解答・アクセス状況（IP・進捗ログ）</h2>
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <span style="font-size:13px; color:var(--muted);">各ユーザーの回答スコア・IP・進捗状況</span>
-        <button id="refresh-logs-btn" style="padding:6px 12px; font-size:13px; min-height:36px;">最新状態に更新</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+      <div class="row" style="margin-top:0;">
+        <button id="view-mode-ip" class="view-mode-btn active">🌐 IPごとにグループ化 &amp; 統計</button>
+        <button id="view-mode-all" class="view-mode-btn">📋 全時系列ログ</button>
       </div>
-      <div style="overflow-x:auto;">
-        <table class="log-table">
-          <thead>
-            <tr>
-              <th>アクセス日時</th>
-              <th>クイズ名</th>
-              <th>接続IP</th>
-              <th>端末識別ID</th>
-              <th>進捗・スコア</th>
-              <th>ステータス</th>
-            </tr>
-          </thead>
-          <tbody id="log-table-body">
-            <tr><td colspan="6" style="text-align:center; color:var(--muted); padding:16px;">ログイン後に表示されます。</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <button id="refresh-logs-btn" style="padding:6px 12px; font-size:13px; min-height:36px;">最新状態に更新</button>
+    </div>
+
+    <div id="logs-container">
+      <div class="card" style="text-align:center; color:var(--muted); padding:20px;">ログイン後に表示されます。</div>
     </div>
 
     <h2 id="form-title">新しいクイズセットを追加</h2>
@@ -220,28 +267,120 @@ async function login() {
   await loadUserLogs();
 }
 
+let currentLogs = [];
+let activeLogMode = 'ip'; // 'ip' | 'all'
+
 document.getElementById('refresh-logs-btn').addEventListener('click', loadUserLogs);
 
+document.getElementById('view-mode-ip').addEventListener('click', () => {
+  activeLogMode = 'ip';
+  document.getElementById('view-mode-ip').classList.add('active');
+  document.getElementById('view-mode-all').classList.remove('active');
+  renderLogs();
+});
+
+document.getElementById('view-mode-all').addEventListener('click', () => {
+  activeLogMode = 'all';
+  document.getElementById('view-mode-all').classList.add('active');
+  document.getElementById('view-mode-ip').classList.remove('active');
+  renderLogs();
+});
+
 async function loadUserLogs() {
-  const tbody = document.getElementById('log-table-body');
-  if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:16px;">読み込み中...</td></tr>';
+  const container = document.getElementById('logs-container');
+  if (!container) return;
+  container.innerHTML = '<div class="card" style="text-align:center; color:var(--muted); padding:20px;">読み込み中...</div>';
   try {
     const res = await fetch('/api/admin/progress', {
       headers: authHeaders()
     });
     if (res.status === 401) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger); padding:16px;">パスワードが不一致のためログを取得できません。</td></tr>';
+      container.innerHTML = '<div class="card" style="text-align:center; color:var(--danger); padding:20px;">パスワードが不一致のためログを取得できません。</div>';
       return;
     }
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const logs = await res.json();
-    if (!Array.isArray(logs) || logs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:16px;">取り組みログがまだありません。</td></tr>';
-      return;
-    }
-    tbody.innerHTML = '';
-    logs.forEach(log => {
+    currentLogs = await res.json();
+    renderLogs();
+  } catch (e) {
+    container.innerHTML = '<div class="card" style="text-align:center; color:var(--danger); padding:20px;">取得エラー: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function renderLogs() {
+  const container = document.getElementById('logs-container');
+  if (!container) return;
+  if (!Array.isArray(currentLogs) || currentLogs.length === 0) {
+    container.innerHTML = '<div class="card" style="text-align:center; color:var(--muted); padding:20px;">取り組みログがまだありません。</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+
+  if (activeLogMode === 'ip') {
+    renderIpGroupedLogs(container);
+  } else {
+    renderAllLogsTable(container);
+  }
+}
+
+function renderIpGroupedLogs(container) {
+  const groups = new Map();
+  currentLogs.forEach(log => {
+    const ip = log.ip || 'ローカル / 不明';
+    if (!groups.has(ip)) groups.set(ip, []);
+    groups.get(ip).push(log);
+  });
+
+  groups.forEach((ipLogs, ip) => {
+    const totalAttempts = ipLogs.length;
+    const completedCount = ipLogs.filter(l => l.completed).length;
+    const ongoingCount = totalAttempts - completedCount;
+    
+    let sumCorrect = 0;
+    let sumTotal = 0;
+    ipLogs.forEach(l => {
+      if (l.completed) {
+        sumCorrect += (l.correct || 0);
+        sumTotal += (l.totalCount || 0);
+      } else {
+        sumCorrect += (l.correct || 0);
+        sumTotal += ((l.correct || 0) + (l.wrong || 0));
+      }
+    });
+    const overallRate = sumTotal > 0 ? Math.round((sumCorrect / sumTotal) * 100) : 0;
+    const devices = [...new Set(ipLogs.map(l => l.deviceId))];
+    const latestDate = ipLogs[0] && ipLogs[0].updatedAt ? new Date(ipLogs[0].updatedAt).toLocaleString('ja-JP') : '-';
+
+    const card = document.createElement('div');
+    card.className = 'ip-group-card';
+    card.innerHTML =
+      '<div class="ip-group-header">' +
+        '<div>' +
+          '<div class="ip-title">🌐 接続IP: <code>' + escapeHtml(ip) + '</code></div>' +
+          '<div style="font-size:12px; color:var(--muted); margin-top:4px;">端末ID: ' + escapeHtml(devices.map(d => d.slice(0, 12) + '...').join(', ')) + '</div>' +
+        '</div>' +
+        '<div style="font-size:12px; color:var(--muted); text-align:right;">最終アクセス: ' + escapeHtml(latestDate) + '</div>' +
+      '</div>' +
+      '<div class="ip-stats-grid">' +
+        '<div class="ip-stat-item">挑戦回数: <strong>' + totalAttempts + '回</strong> (完走 ' + completedCount + ' / 解答中 ' + ongoingCount + ')</div>' +
+        '<div class="ip-stat-item">枠内通算正答率: <strong>' + overallRate + '%</strong> (' + sumCorrect + ' / ' + sumTotal + '問)</div>' +
+      '</div>' +
+      '<div style="overflow-x:auto; margin-top:12px;">' +
+        '<table class="log-table">' +
+          '<thead>' +
+            '<tr>' +
+              '<th>日時</th>' +
+              '<th>クイズ名</th>' +
+              '<th>スコア・解答進捗</th>' +
+              '<th>ステータス</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody class="ip-table-body"></tbody>' +
+        '</table>' +
+      '</div>';
+
+    const tbody = card.querySelector('.ip-table-body');
+    ipLogs.forEach(log => {
       const tr = document.createElement('tr');
       const dateStr = log.updatedAt ? new Date(log.updatedAt).toLocaleString('ja-JP') : '-';
       const statusBadge = log.completed
@@ -255,15 +394,58 @@ async function loadUserLogs() {
       tr.innerHTML =
         '<td>' + escapeHtml(dateStr) + '</td>' +
         '<td><strong>' + escapeHtml(log.quizTitle) + '</strong> <span style="font-size:11px; color:var(--muted);">[' + escapeHtml(log.category) + ']</span></td>' +
-        '<td><code>' + escapeHtml(log.ip) + '</code></td>' +
-        '<td><span style="font-size:11px; color:var(--muted); font-family:monospace;">' + escapeHtml(log.deviceId.slice(0, 16)) + '...</span></td>' +
         '<td>' + escapeHtml(scoreStr) + '</td>' +
         '<td>' + statusBadge + '</td>';
       tbody.appendChild(tr);
     });
-  } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger); padding:16px;">取得エラー: ' + escapeHtml(e.message) + '</td></tr>';
-  }
+
+    container.appendChild(card);
+  });
+}
+
+function renderAllLogsTable(container) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML =
+    '<div style="overflow-x:auto;">' +
+      '<table class="log-table">' +
+        '<thead>' +
+          '<tr>' +
+            '<th>アクセス日時</th>' +
+            '<th>クイズ名</th>' +
+            '<th>接続IP</th>' +
+            '<th>端末識別ID</th>' +
+            '<th>進捗・スコア</th>' +
+            '<th>ステータス</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody id="all-log-table-body"></tbody>' +
+      '</table>' +
+    '</div>';
+
+  const tbody = card.querySelector('#all-log-table-body');
+  currentLogs.forEach(log => {
+    const tr = document.createElement('tr');
+    const dateStr = log.updatedAt ? new Date(log.updatedAt).toLocaleString('ja-JP') : '-';
+    const statusBadge = log.completed
+      ? '<span class="badge-complete">完走</span>'
+      : '<span class="badge-ongoing">解答中 (' + (log.idx + 1) + '/' + log.totalCount + '問)</span>';
+
+    const scoreStr = log.completed
+      ? log.correct + ' / ' + log.totalCount + ' 正解 (' + Math.round((log.correct / (log.totalCount || 1)) * 100) + '%)'
+      : (log.correct + '正解 / ' + log.wrong + '不正解');
+
+    tr.innerHTML =
+      '<td>' + escapeHtml(dateStr) + '</td>' +
+      '<td><strong>' + escapeHtml(log.quizTitle) + '</strong> <span style="font-size:11px; color:var(--muted);">[' + escapeHtml(log.category) + ']</span></td>' +
+      '<td><code>' + escapeHtml(log.ip) + '</code></td>' +
+      '<td><span style="font-size:11px; color:var(--muted); font-family:monospace;">' + escapeHtml(log.deviceId.slice(0, 16)) + '...</span></td>' +
+      '<td>' + escapeHtml(scoreStr) + '</td>' +
+      '<td>' + statusBadge + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  container.appendChild(card);
 }
 
 async function loadQuizList() {
