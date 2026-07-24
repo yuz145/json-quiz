@@ -69,6 +69,31 @@
   .quiz-category-heading:first-child { margin-top: 0; }
   .quiz-category-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
+  #global-settings-row { margin-bottom: 16px; }
+  .toggle-btn {
+    font-size: 15px;
+    font-weight: bold;
+    padding: 14px 20px;
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    background: var(--card);
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .toggle-btn.on { background: var(--accent); border-color: var(--accent-dark); color: #fff; }
+  .toggle-btn.off { background: var(--card); border-color: var(--border); color: var(--muted); }
+  .link-toggle {
+    background: none;
+    border: none;
+    color: var(--accent-dark);
+    font-size: 13px;
+    padding: 6px 0;
+    margin-bottom: 12px;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
   #quiz-screen { display: none; }
   .progress-bar-outer {
     width: 100%;
@@ -126,31 +151,39 @@
       </div>
     </div>
 
+    <div class="row" id="global-settings-row">
+      <button id="shuffle-toggle" class="toggle-btn off">シャッフル: OFF</button>
+      <button id="answer-mode-toggle" class="toggle-btn off">回答モード: 自己採点</button>
+    </div>
+
     <div id="quiz-sets-section" style="display:none; margin-bottom:16px;">
       <div class="q-label">クイズセットを選ぶ</div>
       <div id="quiz-sets-list"></div>
     </div>
 
-    <div class="dropzone" id="dropzone">
-      <p>.json ファイルをここにドラッグ&amp;ドロップ、または</p>
-      <button id="file-select-btn">ファイルを選択</button>
-      <input type="file" id="file-input" accept=".json,application/json" style="display:none;">
-      <div class="filename" id="dropzone-filename"></div>
-    </div>
+    <button id="manual-add-toggle" class="link-toggle">＋ 自分でクイズを追加する（JSON貼り付け／ファイル読み込み）</button>
 
-    <p style="font-size:14px; color:var(--muted); margin-top:0;">
-      または下のテキストエリアに <code>question</code> と <code>answer</code> を持つJSON配列を直接貼り付けて「クイズ開始」を押してください。
-    </p>
-    <textarea id="json-input">[
+    <div id="manual-add-section" style="display:none;">
+      <div class="dropzone" id="dropzone">
+        <p>.json ファイルをここにドラッグ&amp;ドロップ、または</p>
+        <button id="file-select-btn">ファイルを選択</button>
+        <input type="file" id="file-input" accept=".json,application/json" style="display:none;">
+        <div class="filename" id="dropzone-filename"></div>
+      </div>
+
+      <p style="font-size:14px; color:var(--muted); margin-top:0;">
+        または下のテキストエリアに <code>question</code> と <code>answer</code> を持つJSON配列を直接貼り付けて「クイズ開始」を押してください。
+      </p>
+      <textarea id="json-input">[
   { "question": "日本の首都は？", "answer": "東京" },
   { "question": "富士山がある都道府県は？（2つのうち1つ）", "answer": "静岡県・山梨県" },
   { "question": "1年は何日？（うるう年を除く）", "answer": "365日" }
 ]</textarea>
-    <div class="row">
-      <button class="primary" id="start-btn">クイズ開始</button>
-      <button id="shuffle-toggle">シャッフル: OFF</button>
-      <button id="answer-mode-toggle">回答モード: 自己採点</button>
+      <div class="row">
+        <button class="primary" id="start-btn">クイズ開始</button>
+      </div>
     </div>
+
     <div id="error"></div>
   </div>
 
@@ -193,9 +226,6 @@
     <button class="primary" id="review-btn" style="display:none;">間違えた問題を復習する（<span id="review-count">0</span>問）</button>
     <button id="restart-btn">もう一度挑戦</button>
     <button id="edit-again-btn">問題を編集</button>
-    <div id="leaderboard-link-wrap" style="display:none; margin-top:14px;">
-      <a id="leaderboard-link" href="#" target="_blank" rel="noopener">このクイズのランキングを見る</a>
-    </div>
   </div>
 
 </div>
@@ -216,6 +246,24 @@ const setupScreen = document.getElementById('setup-screen');
 const quizScreen = document.getElementById('quiz-screen');
 const resultScreen = document.getElementById('result-screen');
 const errorBox = document.getElementById('error');
+
+function setToggleButton(el, isOn, label) {
+  el.textContent = label;
+  el.classList.toggle('on', isOn);
+  el.classList.toggle('off', !isOn);
+}
+
+function updateShuffleToggle() {
+  setToggleButton(document.getElementById('shuffle-toggle'), shuffleOn, 'シャッフル: ' + (shuffleOn ? 'ON' : 'OFF'));
+}
+
+function updateAnswerModeToggle() {
+  setToggleButton(
+    document.getElementById('answer-mode-toggle'),
+    answerMode === 'type',
+    '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点')
+  );
+}
 
 const STORAGE_KEY = 'quizAppProgress_v1';
 const DEVICE_ID_KEY = 'quizAppDeviceId';
@@ -309,7 +357,8 @@ function checkResume() {
     mode = data.mode || 'normal';
     answerMode = data.answerMode || 'self';
     currentQuizId = data.currentQuizId || null;
-    document.getElementById('answer-mode-toggle').textContent = '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点');
+    updateShuffleToggle();
+    updateAnswerModeToggle();
     banner.style.display = 'none';
     setupScreen.style.display = 'none';
     quizScreen.style.display = 'block';
@@ -393,7 +442,8 @@ async function openQuizSet(id, title) {
       mode = existing.mode || 'normal';
       answerMode = existing.answerMode || answerMode;
       shuffleOn = !!existing.shuffleOn;
-      document.getElementById('answer-mode-toggle').textContent = '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点');
+      updateShuffleToggle();
+      updateAnswerModeToggle();
       setupScreen.style.display = 'none';
       resultScreen.style.display = 'none';
       quizScreen.style.display = 'block';
@@ -409,14 +459,24 @@ async function openQuizSet(id, title) {
 
 loadQuizSetList();
 
-document.getElementById('shuffle-toggle').addEventListener('click', (e) => {
+document.getElementById('shuffle-toggle').addEventListener('click', () => {
   shuffleOn = !shuffleOn;
-  e.target.textContent = 'シャッフル: ' + (shuffleOn ? 'ON' : 'OFF');
+  updateShuffleToggle();
 });
 
-document.getElementById('answer-mode-toggle').addEventListener('click', (e) => {
+document.getElementById('answer-mode-toggle').addEventListener('click', () => {
   answerMode = answerMode === 'self' ? 'type' : 'self';
-  e.target.textContent = '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点');
+  updateAnswerModeToggle();
+});
+
+document.getElementById('manual-add-toggle').addEventListener('click', () => {
+  const section = document.getElementById('manual-add-section');
+  const btn = document.getElementById('manual-add-toggle');
+  const isHidden = section.style.display === 'none';
+  section.style.display = isHidden ? 'block' : 'none';
+  btn.textContent = isHidden
+    ? '− 自分でクイズを追加する（JSON貼り付け／ファイル読み込み）を閉じる'
+    : '＋ 自分でクイズを追加する（JSON貼り付け／ファイル読み込み）';
 });
 
 function startQuizFromText(jsonText) {
@@ -606,13 +666,8 @@ document.getElementById('next-btn').addEventListener('click', () => {
     } else {
       reviewBtn.style.display = 'none';
     }
-    const leaderboardWrap = document.getElementById('leaderboard-link-wrap');
     if (currentQuizId) {
       saveServerProgress(true);
-      document.getElementById('leaderboard-link').href = 'leaderboard.html?quizId=' + encodeURIComponent(currentQuizId);
-      leaderboardWrap.style.display = 'block';
-    } else {
-      leaderboardWrap.style.display = 'none';
     }
     clearProgress();
   } else {

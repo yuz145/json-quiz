@@ -1,4 +1,4 @@
-import { json, progressKey, progressIndexKey, safe } from '../../_utils.js';
+import { json, progressKey, safe } from '../../_utils.js';
 
 const PROGRESS_TTL_SECONDS = 604800; // 1週間操作がなければ自動的に消える
 
@@ -51,14 +51,6 @@ export const onRequestPost = safe(async ({ params, request, env }) => {
   await env.QUIZ_KV.put(progressKey(quizId, deviceId), JSON.stringify(record), {
     expirationTtl: PROGRESS_TTL_SECONDS,
   });
-
-  const idxKey = progressIndexKey(quizId);
-  const idxRaw = await env.QUIZ_KV.get(idxKey);
-  const ids = idxRaw ? JSON.parse(idxRaw) : [];
-  if (!ids.includes(deviceId)) {
-    ids.push(deviceId);
-    await env.QUIZ_KV.put(idxKey, JSON.stringify(ids));
-  }
 
   return json(record);
 });

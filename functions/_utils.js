@@ -51,10 +51,6 @@ export function progressKey(quizId, deviceId) {
   return 'progress:' + quizId + ':' + deviceId;
 }
 
-export function progressIndexKey(quizId) {
-  return 'index:progress:' + quizId;
-}
-
 export function validateQuestions(questions) {
   if (!Array.isArray(questions) || questions.length === 0) return false;
   return questions.every(q => q && typeof q.question === 'string' && typeof q.answer === 'string');
