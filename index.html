@@ -187,8 +187,24 @@
   .btn-correct:hover { background: var(--accent); color: #fff; }
   .btn-wrong { background: #ffebee; border-color: var(--danger); color: var(--danger); }
   .btn-wrong:hover { background: var(--danger); color: #fff; }
-  .nav-row { display: flex; justify-content: space-between; margin-top: 14px; gap: 8px; }
-  .nav-row button { flex: 1 1 calc(50% - 4px); }
+  .btn-subtle {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    padding: 8px 10px;
+    min-height: 40px;
+    text-decoration: underline;
+    cursor: pointer;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    touch-action: manipulation;
+  }
+  .btn-subtle:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+  .nav-row { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; gap: 8px; }
+  .nav-row #next-btn { flex: 1; min-height: 48px; font-size: 16px; }
   #type-answer-input {
     flex: 1 1 100%;
     padding: 10px 12px;
@@ -203,8 +219,7 @@
   #result-screen { display: none; text-align: center; padding: 24px 0; }
   #result-screen .big { font-size: 44px; font-weight: bold; margin: 12px 0; color: var(--accent-dark); }
   .result-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; justify-content: center; }
-  .result-actions button { flex: 1 1 calc(50% - 4px); min-width: 130px; }
-  .result-actions button.full-width { flex: 1 1 100%; }
+  .result-actions button.full-width { flex: 1 1 100%; min-height: 48px; font-size: 16px; }
 
   @media (max-width: 480px) {
     body { padding: 10px 8px 30px; }
@@ -272,8 +287,8 @@
       <button class="btn-wrong" id="mark-wrong">不正解だった</button>
     </div>
     <div class="nav-row">
-      <button id="back-to-setup">最初に戻る</button>
-      <button id="next-btn" disabled>次の問題 →</button>
+      <button id="back-to-setup" class="btn-subtle">← 最初に戻る</button>
+      <button id="next-btn" class="primary" disabled>次の問題 →</button>
     </div>
   </div>
 
@@ -283,8 +298,10 @@
     <p id="final-msg" style="color:var(--muted);"></p>
     <div class="result-actions">
       <button class="primary full-width" id="review-btn" style="display:none;">間違えた問題を復習する（<span id="review-count">0</span>問）</button>
-      <button id="restart-btn">もう一度挑戦</button>
-      <button id="edit-again-btn">最初に戻る</button>
+      <button class="primary full-width" id="restart-btn">もう一度挑戦</button>
+      <div style="width:100%; text-align:left; margin-top:12px;">
+        <button id="edit-again-btn" class="btn-subtle">← 最初に戻る</button>
+      </div>
     </div>
   </div>
 
