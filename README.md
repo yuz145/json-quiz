@@ -1,6 +1,6 @@
 # 自作クイズアプリ
 
-`quiz_app.html` を開くだけで動く、単一HTMLファイル完結のクイズアプリです。外部ライブラリは一切使用していません。
+`index.html` を開くだけで動く、単一HTMLファイル完結のクイズアプリです。外部ライブラリは一切使用していません。
 
 ## 主な機能
 
@@ -12,7 +12,7 @@
 
 ## 使い方
 
-1. `quiz_app.html` をブラウザで開く
+1. `index.html` をブラウザで開く
 2. 次のいずれかの方法で問題を読み込む
    - `quizzes/` フォルダのクイズセット一覧から選ぶ（HTTPサーバー経由で開いている場合のみ表示されます）
    - `.json` ファイルをドロップエリアにドラッグ&ドロップ、または「ファイルを選択」ボタンで選ぶ
@@ -53,16 +53,16 @@
 
 ```bash
 python3 -m http.server 8000
-# ブラウザで http://localhost:8000/quiz_app.html を開く
+# ブラウザで http://localhost:8000/index.html を開く
 ```
 
 ## GitHub Pagesでの公開手順
 
-1. このフォルダ（`quiz_app.html`、`quizzes/` など）をGitHubリポジトリにpushする
+1. このフォルダ（`index.html`、`quizzes/` など）をGitHubリポジトリにpushする
 2. GitHubのリポジトリページで **Settings → Pages** を開く
 3. **Build and deployment** の **Source** を `Deploy from a branch` にする
 4. 公開したいブランチ（例: `main`）とフォルダ（`/ (root)`）を選んで **Save**
-5. 数分待つと `https://<ユーザー名>.github.io/<リポジトリ名>/quiz_app.html` でアクセスできるようになる
+5. 数分待つと `https://<ユーザー名>.github.io/<リポジトリ名>/` でアクセスできるようになる（`index.html` が自動で表示されます）
 
 GitHub Pagesは通常のHTTP(S)で配信されるため、`quizzes/index.json` を使ったクイズセット一覧機能もそのまま動作します。
 
