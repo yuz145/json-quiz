@@ -81,10 +81,40 @@
   .dropzone.dragover { border-color: var(--accent); background: var(--accent-light); color: var(--accent-dark); }
   .dropzone p { margin: 0 0 10px; }
   .dropzone .filename { font-size: 13px; color: var(--accent-dark); margin-top: 8px; font-weight: bold; }
+  .stats-summary-card {
+    background: #e8f5e9;
+    border: 1px solid #c8e6c9;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .stats-title { font-size: 13px; font-weight: bold; color: var(--accent-dark); margin-bottom: 4px; }
+  .stats-counter { font-size: 16px; font-weight: bold; color: var(--accent-dark); margin-bottom: 8px; }
+  .badge-score {
+    display: block;
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--accent-dark);
+    margin-top: 4px;
+    background: rgba(46, 125, 50, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  #quiz-sets-section { display: none; margin-bottom: 16px; }
   .quiz-category-heading { font-size: 13px; font-weight: bold; color: var(--accent-dark); margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.5px; }
   .quiz-category-heading:first-child { margin-top: 0; }
   .quiz-category-row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .quiz-category-row button { flex: 1 1 calc(50% - 4px); min-width: 120px; padding: 12px 8px; font-size: 14px; }
+  .quiz-category-row button {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 130px;
+    padding: 12px 8px;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
 
   #global-settings-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: nowrap; }
   .toggle-btn {
@@ -241,6 +271,11 @@
     </div>
 
     <div id="quiz-sets-section" style="display:none; margin-bottom:16px;">
+      <div id="overall-stats-card" class="stats-summary-card" style="display:none;">
+        <div class="stats-title">全体の達成度</div>
+        <div class="stats-counter" id="overall-stats-counter">0 / 0問 (0%)</div>
+        <div class="progress-bar-outer"><div class="progress-bar-inner" id="overall-progress-bar" style="width:0%;"></div></div>
+      </div>
       <div class="q-label">クイズセットを選ぶ</div>
       <div id="quiz-sets-list"></div>
     </div>
@@ -462,6 +497,35 @@ function checkResume() {
 
 checkResume();
 
+const STATS_KEY = 'quizAppStats_v1';
+
+function loadQuizStats() {
+  try {
+    const raw = localStorage.getItem(STATS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function recordQuizResult(quizId, title, correctCount, totalCount) {
+  if (!quizId) return;
+  const stats = loadQuizStats();
+  const prev = stats[quizId] || { bestScore: 0, total: totalCount };
+  const bestScore = Math.max(prev.bestScore || 0, correctCount);
+  stats[quizId] = {
+    title: title || prev.title || quizId,
+    total: totalCount,
+    bestScore: bestScore,
+    lastScore: correctCount,
+    completed: true,
+    updatedAt: Date.now()
+  };
+  try {
+    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  } catch (e) {}
+}
+
 async function loadQuizSetList() {
   try {
     const res = await fetch('/api/quizzes');
@@ -470,6 +534,11 @@ async function loadQuizSetList() {
     if (!Array.isArray(list) || list.length === 0) return;
     const container = document.getElementById('quiz-sets-list');
     container.innerHTML = '';
+
+    const stats = loadQuizStats();
+    let totalQuestionsSum = 0;
+    let totalBestCorrectSum = 0;
+    let attemptedCount = 0;
 
     const groups = new Map();
     list.forEach(entry => {
@@ -489,7 +558,36 @@ async function loadQuizSetList() {
       row.className = 'quiz-category-row';
       entries.forEach(entry => {
         const btn = document.createElement('button');
-        btn.textContent = (entry.title || entry.id) + '（' + (entry.count || 0) + '問）';
+        const count = entry.count || 0;
+        const st = stats[entry.id];
+
+        let badgeText = '';
+        if (st && st.total) {
+          const best = st.bestScore || 0;
+          const rate = Math.round((best / st.total) * 100);
+          if (best === st.total) {
+            badgeText = '🎉 満点 (100%)';
+          } else {
+            badgeText = '達成度 ' + best + '/' + st.total + '問 (' + rate + '%)';
+          }
+          totalQuestionsSum += st.total;
+          totalBestCorrectSum += best;
+          attemptedCount++;
+        } else {
+          totalQuestionsSum += count;
+        }
+
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = (entry.title || entry.id) + '（' + count + '問）';
+        btn.appendChild(titleSpan);
+
+        if (badgeText) {
+          const badge = document.createElement('span');
+          badge.className = 'badge-score';
+          badge.textContent = badgeText;
+          btn.appendChild(badge);
+        }
+
         btn.addEventListener('click', () => openQuizSet(entry.id, entry.title || entry.id));
         row.appendChild(btn);
       });
@@ -498,10 +596,19 @@ async function loadQuizSetList() {
 
     if (groups.size > 0) {
       document.getElementById('quiz-sets-section').style.display = 'block';
+      const statsCard = document.getElementById('overall-stats-card');
+      if (attemptedCount > 0 && totalQuestionsSum > 0) {
+        const overallRate = Math.round((totalBestCorrectSum / totalQuestionsSum) * 100);
+        document.getElementById('overall-stats-counter').textContent =
+          '正解 ' + totalBestCorrectSum + ' / 全 ' + totalQuestionsSum + '問 (' + overallRate + '%)';
+        document.getElementById('overall-progress-bar').style.width = overallRate + '%';
+        statsCard.style.display = 'block';
+      } else {
+        statsCard.style.display = 'none';
+      }
     }
   } catch (e) {
-    // /api/quizzes が使えない（Functions未設定・KV未バインド等）場合は
-    // 手動入力・ファイル読み込みのみ表示する
+    // /api/quizzes が使えない場合は手動入力のみ表示
   }
 }
 
@@ -513,34 +620,9 @@ async function openQuizSet(id, title) {
     const data = await res.json();
     currentQuizId = data.id;
 
-    let existing = null;
-    try {
-      const progRes = await fetch('/api/progress/' + encodeURIComponent(deviceId) + '?quizId=' + encodeURIComponent(currentQuizId));
-      if (progRes.ok) existing = await progRes.json();
-    } catch (e) {
-      // サーバー側の進捗が取れなくても、新規開始として続行する
-    }
-
-    if (existing && !existing.completed && Array.isArray(existing.order) && existing.order.length > 0) {
-      quiz = data.questions;
-      order = existing.order;
-      idx = existing.idx;
-      correct = existing.correct;
-      wrong = existing.wrong;
-      wrongIndices = existing.wrongIndices || [];
-      mode = existing.mode || 'normal';
-      answerMode = existing.answerMode || answerMode;
-      shuffleOn = !!existing.shuffleOn;
-      updateShuffleToggle();
-      updateAnswerModeToggle();
-      setupScreen.style.display = 'none';
-      resultScreen.style.display = 'none';
-      quizScreen.style.display = 'block';
-      renderQuestion();
-      saveProgress();
-    } else {
-      startQuizFromArray(data.questions);
-    }
+    // 「続きから再開する」ボタン以外で開いた場合は、途中進捗をクリアして「最初から」始める
+    clearProgress();
+    startQuizFromArray(data.questions);
   } catch (e) {
     errorBox.textContent = 'クイズセットの読み込みに失敗しました:\n' + e.message;
   }
@@ -761,6 +843,9 @@ document.getElementById('next-btn').addEventListener('click', () => {
     }
     if (currentQuizId) {
       saveServerProgress(true);
+      if (mode === 'normal') {
+        recordQuizResult(currentQuizId, '', correct, order.length);
+      }
     }
     clearProgress();
   } else {
@@ -786,10 +871,12 @@ document.getElementById('back-to-setup').addEventListener('click', () => {
   clearProgress();
   quizScreen.style.display = 'none';
   setupScreen.style.display = 'block';
+  loadQuizSetList();
 });
 document.getElementById('edit-again-btn').addEventListener('click', () => {
   resultScreen.style.display = 'none';
   setupScreen.style.display = 'block';
+  loadQuizSetList();
 });
 document.getElementById('restart-btn').addEventListener('click', () => {
   idx = 0; correct = 0; wrong = 0;
