@@ -181,42 +181,42 @@
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 14px;
-    padding: 20px 16px;
-    min-height: 140px;
+    padding: 16px 14px;
+    min-height: 110px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
   }
-  .q-label { font-size: 13px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
-  .q-text { font-size: 19px; line-height: 1.6; font-weight: 600; word-break: break-word; }
-  .a-block { margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--border); }
-  .a-text { font-size: 18px; color: var(--accent-dark); font-weight: bold; word-break: break-word; }
-  .judge-row { display: flex; gap: 8px; margin-top: 16px; }
-  .judge-row button { flex: 1 1 calc(50% - 4px); min-height: 52px; font-size: 16px; font-weight: bold; }
+  .q-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+  .q-text { font-size: 18px; line-height: 1.5; font-weight: 600; word-break: break-word; }
+  .a-block { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+  .a-text { font-size: 17px; color: var(--accent-dark); font-weight: bold; word-break: break-word; }
+  .judge-row { display: flex; gap: 8px; margin-top: 12px; }
+  .judge-row button { flex: 1 1 calc(50% - 4px); min-height: 48px; font-size: 16px; font-weight: bold; }
   .btn-correct { background: #e8f5e9; border-color: var(--accent); color: var(--accent-dark); }
   .btn-correct:hover { background: var(--accent); color: #fff; }
   .btn-wrong { background: #ffebee; border-color: var(--danger); color: var(--danger); }
   .btn-wrong:hover { background: var(--danger); color: #fff; }
-  .nav-row { display: flex; justify-content: space-between; margin-top: 20px; gap: 8px; }
+  .nav-row { display: flex; justify-content: space-between; margin-top: 14px; gap: 8px; }
   .nav-row button { flex: 1 1 calc(50% - 4px); }
   #type-answer-input {
     flex: 1 1 100%;
-    padding: 12px;
+    padding: 10px 12px;
     border: 1px solid var(--border);
     border-radius: 10px;
     font-size: 16px;
-    min-height: 48px;
+    min-height: 44px;
     background: var(--card);
   }
-  #type-answer-row { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
-  #type-answer-row button { width: 100%; }
-  #result-screen { display: none; text-align: center; padding: 30px 0; }
+  #type-answer-row { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  #type-answer-row button { width: 100%; min-height: 44px; }
+  #result-screen { display: none; text-align: center; padding: 24px 0; }
   #result-screen .big { font-size: 44px; font-weight: bold; margin: 12px 0; color: var(--accent-dark); }
   .result-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; justify-content: center; }
   .result-actions button { flex: 1 1 calc(50% - 4px); min-width: 130px; }
   .result-actions button.full-width { flex: 1 1 100%; }
 
   @media (max-width: 480px) {
-    body { padding: 12px 8px 40px; }
-    h1 { font-size: 20px; }
+    body { padding: 10px 8px 30px; }
+    h1 { font-size: 20px; margin-bottom: 12px; }
     .toggle-btn { font-size: 14px; padding: 12px 4px; }
   }
 </style>
@@ -237,7 +237,7 @@
 
     <div class="row" id="global-settings-row">
       <button id="shuffle-toggle" class="toggle-btn off">シャッフル: OFF</button>
-      <button id="answer-mode-toggle" class="toggle-btn off">回答モード: 自己採点</button>
+      <button id="answer-mode-toggle" class="toggle-btn off">回答形式: 答えを見る</button>
     </div>
 
     <div id="quiz-sets-section" style="display:none; margin-bottom:16px;">
@@ -286,22 +286,22 @@
       <div class="a-block" id="a-block" style="display:none;">
         <div class="q-label">答え</div>
         <div class="a-text" id="a-text"></div>
-        <div id="auto-hint" style="display:none; font-size:13px; margin-top:8px;"></div>
+        <div id="auto-hint" style="display:none; font-size:13px; margin-top:6px;"></div>
       </div>
     </div>
-    <div class="row" style="margin-top:16px;" id="reveal-row">
+    <div class="row" style="margin-top:10px;" id="reveal-row">
       <button class="primary full-width" id="reveal-btn">答えを表示</button>
     </div>
-    <div style="margin-top:16px; display:none;" id="type-answer-row">
+    <div style="margin-top:10px; display:none;" id="type-answer-row">
       <input type="text" id="type-answer-input" placeholder="答えを入力してEnterまたは「回答する」">
-      <button class="primary full-width" id="submit-answer-btn" style="margin-top:8px;">回答する</button>
+      <button class="primary full-width" id="submit-answer-btn">回答する</button>
     </div>
     <div class="judge-row" id="judge-row" style="display:none;">
       <button class="btn-correct" id="mark-correct">正解した</button>
       <button class="btn-wrong" id="mark-wrong">不正解だった</button>
     </div>
     <div class="nav-row">
-      <button id="back-to-setup">問題を編集</button>
+      <button id="back-to-setup">最初に戻る</button>
       <button id="next-btn" disabled>次の問題 →</button>
     </div>
   </div>
@@ -313,7 +313,7 @@
     <div class="result-actions">
       <button class="primary full-width" id="review-btn" style="display:none;">間違えた問題を復習する（<span id="review-count">0</span>問）</button>
       <button id="restart-btn">もう一度挑戦</button>
-      <button id="edit-again-btn">問題を編集</button>
+      <button id="edit-again-btn">最初に戻る</button>
     </div>
   </div>
 
@@ -350,7 +350,7 @@ function updateAnswerModeToggle() {
   setToggleButton(
     document.getElementById('answer-mode-toggle'),
     answerMode === 'type',
-    '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力採点')
+    '回答形式: ' + (answerMode === 'self' ? '答えを見る' : '文字入力')
   );
 }
 
