@@ -249,22 +249,44 @@ document.getElementById('password-input').addEventListener('keydown', (e) => {
 async function login() {
   const pw = document.getElementById('password-input').value;
   const loginError = document.getElementById('login-error');
+  const loginBtn = document.getElementById('login-btn');
   loginError.textContent = '';
   if (!pw) {
     loginError.textContent = 'パスワードを入力してください。';
     return;
   }
-  // パスワードの正誤は追加/編集/削除リクエスト時に401で判明する（一覧取得自体は認証不要）
-  adminPassword = pw;
+
+  loginBtn.disabled = true;
+  loginBtn.textContent = '認証中...';
+
   try {
-    sessionStorage.setItem('quizAdminPassword', pw);
+    const res = await fetch('/api/admin/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Admin-Password': pw }
+    });
+
+    if (res.status === 401 || !res.ok) {
+      loginError.textContent = 'パスワードが違います。';
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'ログイン';
+      return;
+    }
+
+    adminPassword = pw;
+    try {
+      sessionStorage.setItem('quizAdminPassword', pw);
+    } catch (e) {}
+
+    loginScreen.style.display = 'none';
+    adminScreen.style.display = 'block';
+    await loadQuizList();
+    await loadUserLogs();
   } catch (e) {
-    // sessionStorageが使えなくても致命的ではない
+    loginError.textContent = '認証通信エラー: ' + e.message;
+  } finally {
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'ログイン';
   }
-  loginScreen.style.display = 'none';
-  adminScreen.style.display = 'block';
-  await loadQuizList();
-  await loadUserLogs();
 }
 
 let currentLogs = [];
@@ -626,15 +648,30 @@ document.getElementById('save-btn').addEventListener('click', async () => {
   }
 });
 
-// 同じタブ内でのリロード時は簡易的にパスワードを引き継ぐ（保存はsessionStorageのみ、送信は毎回ヘッダー経由）
-try {
-  const saved = sessionStorage.getItem('quizAdminPassword');
-  if (saved) {
-    document.getElementById('password-input').value = saved;
+// リロード時のパスワード自動認証チェック
+(async () => {
+  try {
+    const saved = sessionStorage.getItem('quizAdminPassword');
+    if (saved) {
+      document.getElementById('password-input').value = saved;
+      const res = await fetch('/api/admin/auth', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Admin-Password': saved }
+      });
+      if (res.ok) {
+        adminPassword = saved;
+        loginScreen.style.display = 'none';
+        adminScreen.style.display = 'block';
+        await loadQuizList();
+        await loadUserLogs();
+      } else {
+        sessionStorage.removeItem('quizAdminPassword');
+      }
+    }
+  } catch (e) {
+    // no-op
   }
-} catch (e) {
-  // no-op
-}
+})();
 </script>
 </body>
 </html>
