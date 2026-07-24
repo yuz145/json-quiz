@@ -198,7 +198,10 @@
         <button id="view-mode-ip" class="view-mode-btn active">🌐 IPごとにグループ化 &amp; 統計</button>
         <button id="view-mode-all" class="view-mode-btn">📋 全時系列ログ</button>
       </div>
-      <button id="refresh-logs-btn" style="padding:6px 12px; font-size:13px; min-height:36px;">最新状態に更新</button>
+      <div class="row" style="margin-top:0; gap:8px;">
+        <button id="refresh-logs-btn" style="padding:6px 12px; font-size:13px; min-height:36px;">最新状態に更新</button>
+        <button id="clear-logs-btn" class="danger" style="padding:6px 12px; font-size:13px; min-height:36px;">🗑️ 全ログを削除</button>
+      </div>
     </div>
 
     <div id="logs-container">
@@ -293,6 +296,35 @@ let currentLogs = [];
 let activeLogMode = 'ip'; // 'ip' | 'all'
 
 document.getElementById('refresh-logs-btn').addEventListener('click', loadUserLogs);
+document.getElementById('clear-logs-btn').addEventListener('click', clearAllLogs);
+
+async function clearAllLogs() {
+  if (!confirm('現在までのユーザー取り組みログ・アクセスIP記録をすべて全削除します。\n本当に削除してよろしいですか？（元に戻せません）')) {
+    return;
+  }
+  const clearBtn = document.getElementById('clear-logs-btn');
+  clearBtn.disabled = true;
+  clearBtn.textContent = '削除中...';
+  try {
+    const res = await fetch('/api/admin/progress', {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    if (res.status === 401) {
+      alert('パスワードが違うため削除できませんでした。');
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    currentLogs = [];
+    renderLogs();
+    alert('現在までの取り組みログをすべて全削除しました。');
+  } catch (e) {
+    alert('ログの全削除に失敗しました:\n' + e.message);
+  } finally {
+    clearBtn.disabled = false;
+    clearBtn.textContent = '🗑️ 全ログを削除';
+  }
+}
 
 document.getElementById('view-mode-ip').addEventListener('click', () => {
   activeLogMode = 'ip';

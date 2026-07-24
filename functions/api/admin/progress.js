@@ -65,3 +65,29 @@ export const onRequestGet = safe(async ({ request, env }) => {
 
   return json(allRecords);
 });
+
+export const onRequestDelete = safe(async ({ request, env }) => {
+  if (!isAdmin(request, env)) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+
+  const quizzes = await getQuizIndex(env);
+  if (Array.isArray(quizzes)) {
+    for (const q of quizzes) {
+      if (!q || !q.id) continue;
+      const indexKey = 'index:progress:' + q.id;
+      try {
+        const rawDeviceList = await env.QUIZ_KV.get(indexKey);
+        const deviceIds = rawDeviceList ? JSON.parse(rawDeviceList) : [];
+        if (Array.isArray(deviceIds)) {
+          await Promise.all(
+            deviceIds.map(devId => env.QUIZ_KV.delete(progressKey(q.id, devId)))
+          );
+        }
+        await env.QUIZ_KV.delete(indexKey);
+      } catch (e) {}
+    }
+  }
+
+  return json({ success: true, message: 'すべての取り組みログを全削除しました。' });
+});

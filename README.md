@@ -56,7 +56,9 @@ functions/
                               DELETE /api/quiz/:id          クイズセット削除（管理者のみ）
     progress/[deviceId].js   GET  /api/progress/:deviceId  進捗取得
                               POST /api/progress/:deviceId  進捗・接続IP保存（TTL 1週間）
+    admin/auth.js            POST /api/admin/auth         管理者パスワード事前検証
     admin/progress.js        GET  /api/admin/progress     管理者専用: ユーザー解答・IPアクセスログ一覧取得
+                              DELETE /api/admin/progress  管理者専用: 全アクセス・解答ログを一括全削除
     leaderboard/[quizId].js  GET  /api/leaderboard/:quizId  匿名化されたランキング取得
 ```
 
