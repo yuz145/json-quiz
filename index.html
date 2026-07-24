@@ -146,6 +146,7 @@
     <div class="row">
       <button class="primary" id="start-btn">クイズ開始</button>
       <button id="shuffle-toggle">シャッフル: OFF</button>
+      <button id="answer-mode-toggle">回答モード: 自己採点</button>
     </div>
     <div id="error"></div>
   </div>
@@ -162,10 +163,15 @@
       <div class="a-block" id="a-block" style="display:none;">
         <div class="q-label">答え</div>
         <div class="a-text" id="a-text"></div>
+        <div id="auto-hint" style="display:none; font-size:13px; margin-top:8px;"></div>
       </div>
     </div>
-    <div class="row" style="margin-top:16px;">
+    <div class="row" style="margin-top:16px;" id="reveal-row">
       <button class="primary" id="reveal-btn" style="flex:1;">答えを表示</button>
+    </div>
+    <div class="row" style="margin-top:16px; display:none;" id="type-answer-row">
+      <input type="text" id="type-answer-input" placeholder="答えを入力してEnterまたは「回答する」" style="flex:1; padding:10px; border:1px solid var(--border); border-radius:8px; font-size:14px;">
+      <button class="primary" id="submit-answer-btn">回答する</button>
     </div>
     <div class="judge-row" id="judge-row" style="display:none;">
       <button class="btn-correct" id="mark-correct">正解した</button>
@@ -197,6 +203,7 @@ let wrong = 0;
 let shuffleOn = false;
 let wrongIndices = [];
 let mode = 'normal'; // 'normal' | 'review'
+let answerMode = 'self'; // 'self' | 'type'
 
 const setupScreen = document.getElementById('setup-screen');
 const quizScreen = document.getElementById('quiz-screen');
@@ -207,7 +214,7 @@ const STORAGE_KEY = 'quizAppProgress_v1';
 
 function saveProgress() {
   const data = {
-    quiz, order, idx, correct, wrong, shuffleOn, wrongIndices, mode,
+    quiz, order, idx, correct, wrong, shuffleOn, wrongIndices, mode, answerMode,
     savedAt: Date.now()
   };
   try {
@@ -251,6 +258,8 @@ function checkResume() {
     shuffleOn = data.shuffleOn;
     wrongIndices = data.wrongIndices || [];
     mode = data.mode || 'normal';
+    answerMode = data.answerMode || 'self';
+    document.getElementById('answer-mode-toggle').textContent = '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点');
     banner.style.display = 'none';
     setupScreen.style.display = 'none';
     quizScreen.style.display = 'block';
@@ -307,6 +316,11 @@ loadQuizSetList();
 document.getElementById('shuffle-toggle').addEventListener('click', (e) => {
   shuffleOn = !shuffleOn;
   e.target.textContent = 'シャッフル: ' + (shuffleOn ? 'ON' : 'OFF');
+});
+
+document.getElementById('answer-mode-toggle').addEventListener('click', (e) => {
+  answerMode = answerMode === 'self' ? 'type' : 'self';
+  e.target.textContent = '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点');
 });
 
 function startQuizFromText(jsonText) {
@@ -410,8 +424,18 @@ function renderQuestion() {
   document.getElementById('a-text').textContent = item.answer;
   document.getElementById('a-block').style.display = 'none';
   document.getElementById('judge-row').style.display = 'none';
-  document.getElementById('reveal-btn').style.display = 'block';
+  document.getElementById('auto-hint').style.display = 'none';
+  document.getElementById('type-answer-input').value = '';
   document.getElementById('next-btn').disabled = true;
+  if (answerMode === 'type') {
+    document.getElementById('reveal-row').style.display = 'none';
+    document.getElementById('type-answer-row').style.display = 'flex';
+    document.getElementById('type-answer-input').focus();
+  } else {
+    document.getElementById('reveal-row').style.display = 'flex';
+    document.getElementById('type-answer-row').style.display = 'none';
+    document.getElementById('reveal-btn').style.display = 'block';
+  }
   document.getElementById('q-counter').textContent = (idx + 1) + ' / ' + order.length + '問' + (mode === 'review' ? '（復習）' : '');
   document.getElementById('progress-bar').style.width = Math.round(((idx) / order.length) * 100) + '%';
   document.getElementById('correct-count').textContent = correct;
@@ -422,6 +446,28 @@ document.getElementById('reveal-btn').addEventListener('click', () => {
   document.getElementById('a-block').style.display = 'block';
   document.getElementById('judge-row').style.display = 'flex';
   document.getElementById('reveal-btn').style.display = 'none';
+});
+
+function submitTypedAnswer() {
+  const item = quiz[order[idx]];
+  const userAnswer = document.getElementById('type-answer-input').value.trim();
+  const isMatch = userAnswer.length > 0 && userAnswer === item.answer.trim();
+  document.getElementById('a-block').style.display = 'block';
+  document.getElementById('judge-row').style.display = 'flex';
+  document.getElementById('type-answer-row').style.display = 'none';
+  const hint = document.getElementById('auto-hint');
+  hint.style.display = 'block';
+  hint.style.color = isMatch ? 'var(--accent-dark)' : 'var(--danger)';
+  hint.textContent = '自動判定（完全一致）: ' + (isMatch ? '一致' : '不一致')
+    + ' ／ あなたの回答: ' + (userAnswer || '（未入力）');
+}
+
+document.getElementById('submit-answer-btn').addEventListener('click', submitTypedAnswer);
+document.getElementById('type-answer-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    submitTypedAnswer();
+  }
 });
 
 document.getElementById('mark-correct').addEventListener('click', () => {
