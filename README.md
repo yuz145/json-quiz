@@ -10,6 +10,7 @@
 - 名前の入力は不要。初回アクセス時にブラウザの`localStorage`へランダムなデバイスIDを自動生成して保存し、以後はそれをキーに進捗をKVに保存
 - クイズセットごとの参加者を「参加者1」「参加者2」のように匿名化した正答率ランキングを見られる `/leaderboard.html`
 - パスワード保護された管理画面 `/admin.html` からクイズセット（question/answerの配列＋カテゴリ）を追加・編集・削除
+- 管理画面にて各ユーザーの接続IP・端末識別ID・クイズごとの解答進捗/スコア/最終アクセス日時を一覧確認可能（`GET /api/admin/progress`）
 - シャッフル出題および回答形式切り替え（「答えを見る」/「文字入力」）のトグルボタンを大型化＆ON/OFFで明確に色付け
 - スマートフォン表示の全画面レスポンシブ最適化（適切なタップエリア、フォームズーム防止など）
 - 間違えた問題だけをもう一度出題する「復習モード」
@@ -53,8 +54,9 @@ functions/
     quiz/[id].js              GET  /api/quiz/:id            クイズセット1件取得
                               PUT  /api/quiz/:id            クイズセット更新（管理者のみ）
                               DELETE /api/quiz/:id          クイズセット削除（管理者のみ）
-    progress/[deviceId].js   GET  /api/progress/:deviceId?quizId=xxx  進捗取得
-                              POST /api/progress/:deviceId  進捗保存（TTL 1週間）
+    progress/[deviceId].js   GET  /api/progress/:deviceId  進捗取得
+                              POST /api/progress/:deviceId  進捗・接続IP保存（TTL 1週間）
+    admin/progress.js        GET  /api/admin/progress     管理者専用: ユーザー解答・IPアクセスログ一覧取得
     leaderboard/[quizId].js  GET  /api/leaderboard/:quizId  匿名化されたランキング取得
 ```
 

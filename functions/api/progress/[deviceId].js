@@ -33,10 +33,17 @@ export const onRequestPost = safe(async ({ params, request, env }) => {
   const quizId = body.quizId;
   if (!quizId) return json({ error: 'quizId is required' }, 400);
 
+  // Cloudflareヘッダー経由で接続IPアドレスを取得
+  const ip = request.headers.get('cf-connecting-ip')
+    || request.headers.get('x-forwarded-for')
+    || request.headers.get('x-real-ip')
+    || 'direct';
+
   const now = new Date().toISOString();
   const record = {
     deviceId,
     quizId,
+    ip,
     idx: Number.isInteger(body.idx) ? body.idx : 0,
     order: Array.isArray(body.order) ? body.order : [],
     correct: Number.isInteger(body.correct) ? body.correct : 0,
@@ -48,9 +55,24 @@ export const onRequestPost = safe(async ({ params, request, env }) => {
     completed: !!body.completed,
     updatedAt: now,
   };
+
   await env.QUIZ_KV.put(progressKey(quizId, deviceId), JSON.stringify(record), {
     expirationTtl: PROGRESS_TTL_SECONDS,
   });
+
+  // 管理者表示用にそのクイズセットをプレイしたデバイスID一覧のインデックスを保存
+  const indexKey = 'index:progress:' + quizId;
+  try {
+    const rawIdx = await env.QUIZ_KV.get(indexKey);
+    let list = rawIdx ? JSON.parse(rawIdx) : [];
+    if (!Array.isArray(list)) list = [];
+    if (!list.includes(deviceId)) {
+      list.push(deviceId);
+      await env.QUIZ_KV.put(indexKey, JSON.stringify(list));
+    }
+  } catch (e) {
+    // インデックス保存の失敗で本体処理を止めない
+  }
 
   return json(record);
 });

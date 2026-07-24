@@ -74,6 +74,39 @@
   #status-msg { color: var(--accent-dark); font-size: 14px; margin-top: 8px; font-weight: bold; }
   #login-screen { max-width: 400px; margin: 40px auto 0; width: 100%; }
   a.back-link { font-size: 14px; color: var(--accent-dark); text-decoration: underline; }
+
+  .log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .log-table th, .log-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+  }
+  .log-table th {
+    background: #f8f9fa;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .badge-complete {
+    background: #e8f5e9;
+    color: var(--accent-dark);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 12px;
+  }
+  .badge-ongoing {
+    background: #fff8e1;
+    color: #b78103;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 12px;
+  }
 </style>
 </head>
 <body>
@@ -98,6 +131,31 @@
     <div class="card" id="quiz-list-card">
       <div id="quiz-list"></div>
       <div id="quiz-list-empty" style="font-size:13px; color:var(--muted);">まだクイズセットがありません。</div>
+    </div>
+
+    <h2>ユーザー解答・アクセス状況（IP・進捗ログ）</h2>
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <span style="font-size:13px; color:var(--muted);">各ユーザーの回答スコア・IP・進捗状況</span>
+        <button id="refresh-logs-btn" style="padding:6px 12px; font-size:13px; min-height:36px;">最新状態に更新</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>アクセス日時</th>
+              <th>クイズ名</th>
+              <th>接続IP</th>
+              <th>端末識別ID</th>
+              <th>進捗・スコア</th>
+              <th>ステータス</th>
+            </tr>
+          </thead>
+          <tbody id="log-table-body">
+            <tr><td colspan="6" style="text-align:center; color:var(--muted); padding:16px;">ログイン後に表示されます。</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <h2 id="form-title">新しいクイズセットを追加</h2>
@@ -159,6 +217,53 @@ async function login() {
   loginScreen.style.display = 'none';
   adminScreen.style.display = 'block';
   await loadQuizList();
+  await loadUserLogs();
+}
+
+document.getElementById('refresh-logs-btn').addEventListener('click', loadUserLogs);
+
+async function loadUserLogs() {
+  const tbody = document.getElementById('log-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:16px;">読み込み中...</td></tr>';
+  try {
+    const res = await fetch('/api/admin/progress', {
+      headers: authHeaders()
+    });
+    if (res.status === 401) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger); padding:16px;">パスワードが不一致のためログを取得できません。</td></tr>';
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const logs = await res.json();
+    if (!Array.isArray(logs) || logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:16px;">取り組みログがまだありません。</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    logs.forEach(log => {
+      const tr = document.createElement('tr');
+      const dateStr = log.updatedAt ? new Date(log.updatedAt).toLocaleString('ja-JP') : '-';
+      const statusBadge = log.completed
+        ? '<span class="badge-complete">完走</span>'
+        : '<span class="badge-ongoing">解答中 (' + (log.idx + 1) + '/' + log.totalCount + '問)</span>';
+
+      const scoreStr = log.completed
+        ? log.correct + ' / ' + log.totalCount + ' 正解 (' + Math.round((log.correct / (log.totalCount || 1)) * 100) + '%)'
+        : (log.correct + '正解 / ' + log.wrong + '不正解');
+
+      tr.innerHTML =
+        '<td>' + escapeHtml(dateStr) + '</td>' +
+        '<td><strong>' + escapeHtml(log.quizTitle) + '</strong> <span style="font-size:11px; color:var(--muted);">[' + escapeHtml(log.category) + ']</span></td>' +
+        '<td><code>' + escapeHtml(log.ip) + '</code></td>' +
+        '<td><span style="font-size:11px; color:var(--muted); font-family:monospace;">' + escapeHtml(log.deviceId.slice(0, 16)) + '...</span></td>' +
+        '<td>' + escapeHtml(scoreStr) + '</td>' +
+        '<td>' + statusBadge + '</td>';
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger); padding:16px;">取得エラー: ' + escapeHtml(e.message) + '</td></tr>';
+  }
 }
 
 async function loadQuizList() {
