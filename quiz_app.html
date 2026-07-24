@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>自作クイズアプリ</title>
+<style>
+  :root {
+    --bg: #f5f5f2;
+    --card: #ffffff;
+    --border: #ddd;
+    --accent: #4a7c59;
+    --accent-dark: #33573d;
+    --danger: #b5433e;
+    --text: #222;
+    --muted: #777;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 24px 16px 60px;
+    display: flex;
+    justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 640px; }
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  textarea {
+    width: 100%;
+    height: 160px;
+    font-family: monospace;
+    font-size: 13px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    resize: vertical;
+    background: var(--card);
+  }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button {
+    font-size: 14px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent-dark); }
+  button.primary:hover { background: var(--accent-dark); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  #error { color: var(--danger); font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    background: var(--card);
+    margin-bottom: 12px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .dropzone.dragover { border-color: var(--accent); background: #eef4ee; color: var(--accent-dark); }
+  .dropzone p { margin: 0 0 10px; }
+  .dropzone .filename { font-size: 12px; color: var(--accent-dark); margin-top: 8px; }
+
+  #quiz-screen { display: none; }
+  .progress-bar-outer {
+    width: 100%;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .progress-bar-inner {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.25s ease;
+  }
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .score { font-weight: bold; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 20px;
+    min-height: 120px;
+  }
+  .q-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .q-text { font-size: 18px; line-height: 1.6; }
+  .a-block { margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--border); }
+  .a-text { font-size: 17px; color: var(--accent-dark); font-weight: bold; }
+  .judge-row { display: flex; gap: 10px; margin-top: 16px; }
+  .judge-row button { flex: 1; }
+  .btn-correct { border-color: var(--accent); color: var(--accent-dark); }
+  .btn-wrong { border-color: var(--danger); color: var(--danger); }
+  .nav-row { display: flex; justify-content: space-between; margin-top: 20px; }
+  #result-screen { display: none; text-align: center; padding: 40px 0; }
+  #result-screen .big { font-size: 40px; font-weight: bold; margin: 12px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="setup-screen">
+    <h1>自作クイズアプリ</h1>
+
+    <div id="resume-banner" style="display:none; background:#fff8e1; border:1px solid #e0c46c; border-radius:8px; padding:14px; margin-bottom:16px; font-size:14px;">
+      <div id="resume-text">前回の続きがあります。</div>
+      <div class="row">
+        <button class="primary" id="resume-btn">続きから再開する</button>
+        <button id="discard-btn">最初からやり直す</button>
+      </div>
+    </div>
+
+    <div id="quiz-sets-section" style="display:none; margin-bottom:16px;">
+      <div class="q-label">クイズセットを選ぶ</div>
+      <div class="row" id="quiz-sets-list"></div>
+    </div>
+
+    <div class="dropzone" id="dropzone">
+      <p>.json ファイルをここにドラッグ&amp;ドロップ、または</p>
+      <button id="file-select-btn">ファイルを選択</button>
+      <input type="file" id="file-input" accept=".json,application/json" style="display:none;">
+      <div class="filename" id="dropzone-filename"></div>
+    </div>
+
+    <p style="font-size:14px; color:var(--muted); margin-top:0;">
+      または下のテキストエリアに <code>question</code> と <code>answer</code> を持つJSON配列を直接貼り付けて「クイズ開始」を押してください。
+    </p>
+    <textarea id="json-input">[
+  { "question": "日本の首都は？", "answer": "東京" },
+  { "question": "富士山がある都道府県は？（2つのうち1つ）", "answer": "静岡県・山梨県" },
+  { "question": "1年は何日？（うるう年を除く）", "answer": "365日" }
+]</textarea>
+    <div class="row">
+      <button class="primary" id="start-btn">クイズ開始</button>
+      <button id="shuffle-toggle">シャッフル: OFF</button>
+    </div>
+    <div id="error"></div>
+  </div>
+
+  <div id="quiz-screen">
+    <div class="progress-bar-outer"><div class="progress-bar-inner" id="progress-bar"></div></div>
+    <div class="meta">
+      <span id="q-counter">1 / 10問</span>
+      <span class="score">正解 <span id="correct-count">0</span> / 不正解 <span id="wrong-count">0</span></span>
+    </div>
+    <div class="card">
+      <div class="q-label">問題</div>
+      <div class="q-text" id="q-text"></div>
+      <div class="a-block" id="a-block" style="display:none;">
+        <div class="q-label">答え</div>
+        <div class="a-text" id="a-text"></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:16px;">
+      <button class="primary" id="reveal-btn" style="flex:1;">答えを表示</button>
+    </div>
+    <div class="judge-row" id="judge-row" style="display:none;">
+      <button class="btn-correct" id="mark-correct">正解した</button>
+      <button class="btn-wrong" id="mark-wrong">不正解だった</button>
+    </div>
+    <div class="nav-row">
+      <button id="back-to-setup">問題を編集</button>
+      <button id="next-btn" disabled>次の問題 →</button>
+    </div>
+  </div>
+
+  <div id="result-screen">
+    <div class="q-label">結果</div>
+    <div class="big" id="final-score">0 / 0</div>
+    <p id="final-msg" style="color:var(--muted);"></p>
+    <button class="primary" id="review-btn" style="display:none;">間違えた問題を復習する（<span id="review-count">0</span>問）</button>
+    <button id="restart-btn">もう一度挑戦</button>
+    <button id="edit-again-btn">問題を編集</button>
+  </div>
+
+</div>
+
+<script>
+let quiz = [];
+let order = [];
+let idx = 0;
+let correct = 0;
+let wrong = 0;
+let shuffleOn = false;
+let wrongIndices = [];
+let mode = 'normal'; // 'normal' | 'review'
+
+const setupScreen = document.getElementById('setup-screen');
+const quizScreen = document.getElementById('quiz-screen');
+const resultScreen = document.getElementById('result-screen');
+const errorBox = document.getElementById('error');
+
+const STORAGE_KEY = 'quizAppProgress_v1';
+
+function saveProgress() {
+  const data = {
+    quiz, order, idx, correct, wrong, shuffleOn, wrongIndices, mode,
+    savedAt: Date.now()
+  };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    // localStorageが使えない環境（容量超過等）では黙って諦める
+  }
+}
+
+function clearProgress() {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+function loadProgress() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data.quiz) || !Array.isArray(data.order)) return null;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+function checkResume() {
+  const data = loadProgress();
+  if (!data) return;
+  const banner = document.getElementById('resume-banner');
+  const text = document.getElementById('resume-text');
+  const modeLabel = data.mode === 'review' ? '（復習モード）' : '';
+  text.textContent = '前回の続き' + modeLabel + 'があります（' + (data.idx + 1) + ' / ' + data.order.length + '問、正解 ' + data.correct + ' / 不正解 ' + data.wrong + '）。続きから再開しますか？';
+  banner.style.display = 'block';
+
+  document.getElementById('resume-btn').addEventListener('click', () => {
+    quiz = data.quiz;
+    order = data.order;
+    idx = data.idx;
+    correct = data.correct;
+    wrong = data.wrong;
+    shuffleOn = data.shuffleOn;
+    wrongIndices = data.wrongIndices || [];
+    mode = data.mode || 'normal';
+    banner.style.display = 'none';
+    setupScreen.style.display = 'none';
+    quizScreen.style.display = 'block';
+    renderQuestion();
+  }, { once: true });
+
+  document.getElementById('discard-btn').addEventListener('click', () => {
+    clearProgress();
+    banner.style.display = 'none';
+  }, { once: true });
+}
+
+checkResume();
+
+async function loadQuizSetList() {
+  try {
+    const res = await fetch('quizzes/index.json');
+    if (!res.ok) return;
+    const list = await res.json();
+    if (!Array.isArray(list) || list.length === 0) return;
+    const container = document.getElementById('quiz-sets-list');
+    container.innerHTML = '';
+    list.forEach(entry => {
+      if (!entry || typeof entry.file !== 'string') return;
+      const btn = document.createElement('button');
+      btn.textContent = entry.title || entry.file;
+      btn.addEventListener('click', () => loadQuizSetFile(entry.file));
+      container.appendChild(btn);
+    });
+    if (container.children.length > 0) {
+      document.getElementById('quiz-sets-section').style.display = 'block';
+    }
+  } catch (e) {
+    // quizzes/index.json が無い、または file:// で開いていて fetch できない場合は
+    // 手動入力・ファイル読み込みのみ表示する
+  }
+}
+
+async function loadQuizSetFile(file) {
+  errorBox.textContent = '';
+  try {
+    const res = await fetch('quizzes/' + file);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    document.getElementById('json-input').value = text;
+    startQuizFromText(text);
+  } catch (e) {
+    errorBox.textContent = 'クイズセットの読み込みに失敗しました:\n' + e.message;
+  }
+}
+
+loadQuizSetList();
+
+document.getElementById('shuffle-toggle').addEventListener('click', (e) => {
+  shuffleOn = !shuffleOn;
+  e.target.textContent = 'シャッフル: ' + (shuffleOn ? 'ON' : 'OFF');
+});
+
+function startQuizFromText(jsonText) {
+  errorBox.textContent = '';
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch (e) {
+    errorBox.textContent = 'JSONの形式が正しくありません:\n' + e.message;
+    return false;
+  }
+  if (!Array.isArray(data) || data.length === 0) {
+    errorBox.textContent = 'JSONは question と answer を持つオブジェクトの配列にしてください。';
+    return false;
+  }
+  for (const item of data) {
+    if (typeof item.question !== 'string' || typeof item.answer !== 'string') {
+      errorBox.textContent = '各要素に question と answer（文字列）が必要です。';
+      return false;
+    }
+  }
+  quiz = data;
+  order = quiz.map((_, i) => i);
+  if (shuffleOn) {
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  }
+  idx = 0;
+  correct = 0;
+  wrong = 0;
+  wrongIndices = [];
+  mode = 'normal';
+  setupScreen.style.display = 'none';
+  resultScreen.style.display = 'none';
+  quizScreen.style.display = 'block';
+  renderQuestion();
+  saveProgress();
+  return true;
+}
+
+document.getElementById('start-btn').addEventListener('click', () => {
+  startQuizFromText(document.getElementById('json-input').value);
+});
+
+function loadJsonFile(file) {
+  const dzName = document.getElementById('dropzone-filename');
+  errorBox.textContent = '';
+  if (!file) return;
+  if (!/\.json$/i.test(file.name)) {
+    errorBox.textContent = '.json ファイルを選択してください。';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    document.getElementById('json-input').value = reader.result;
+    dzName.textContent = '読み込み済み: ' + file.name;
+    startQuizFromText(reader.result);
+  };
+  reader.onerror = () => {
+    errorBox.textContent = 'ファイルの読み込みに失敗しました。';
+  };
+  reader.readAsText(file);
+}
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+
+document.getElementById('file-select-btn').addEventListener('click', () => {
+  fileInput.click();
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files && fileInput.files[0]) {
+    loadJsonFile(fileInput.files[0]);
+  }
+});
+
+['dragenter', 'dragover'].forEach(evt => {
+  dropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropzone.classList.add('dragover');
+  });
+});
+['dragleave', 'dragend', 'drop'].forEach(evt => {
+  dropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropzone.classList.remove('dragover');
+  });
+});
+dropzone.addEventListener('drop', (e) => {
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) loadJsonFile(file);
+});
+
+function renderQuestion() {
+  const item = quiz[order[idx]];
+  document.getElementById('q-text').textContent = item.question;
+  document.getElementById('a-text').textContent = item.answer;
+  document.getElementById('a-block').style.display = 'none';
+  document.getElementById('judge-row').style.display = 'none';
+  document.getElementById('reveal-btn').style.display = 'block';
+  document.getElementById('next-btn').disabled = true;
+  document.getElementById('q-counter').textContent = (idx + 1) + ' / ' + order.length + '問' + (mode === 'review' ? '（復習）' : '');
+  document.getElementById('progress-bar').style.width = Math.round(((idx) / order.length) * 100) + '%';
+  document.getElementById('correct-count').textContent = correct;
+  document.getElementById('wrong-count').textContent = wrong;
+}
+
+document.getElementById('reveal-btn').addEventListener('click', () => {
+  document.getElementById('a-block').style.display = 'block';
+  document.getElementById('judge-row').style.display = 'flex';
+  document.getElementById('reveal-btn').style.display = 'none';
+});
+
+document.getElementById('mark-correct').addEventListener('click', () => {
+  correct++;
+  finishJudge();
+});
+document.getElementById('mark-wrong').addEventListener('click', () => {
+  wrong++;
+  wrongIndices.push(order[idx]);
+  finishJudge();
+});
+function finishJudge() {
+  document.getElementById('judge-row').style.display = 'none';
+  document.getElementById('correct-count').textContent = correct;
+  document.getElementById('wrong-count').textContent = wrong;
+  document.getElementById('next-btn').disabled = false;
+  saveProgress();
+}
+
+document.getElementById('next-btn').addEventListener('click', () => {
+  idx++;
+  if (idx >= order.length) {
+    document.getElementById('progress-bar').style.width = '100%';
+    quizScreen.style.display = 'none';
+    resultScreen.style.display = 'block';
+    document.getElementById('final-score').textContent = correct + ' / ' + order.length;
+    const rate = Math.round((correct / order.length) * 100);
+    document.getElementById('final-msg').textContent = '正答率 ' + rate + '%（不正解 ' + wrong + '問）';
+    const uniqueWrong = [...new Set(wrongIndices)];
+    const reviewBtn = document.getElementById('review-btn');
+    if (uniqueWrong.length > 0) {
+      reviewBtn.style.display = 'inline-block';
+      document.getElementById('review-count').textContent = uniqueWrong.length;
+    } else {
+      reviewBtn.style.display = 'none';
+    }
+    clearProgress();
+  } else {
+    renderQuestion();
+    saveProgress();
+  }
+});
+
+document.getElementById('review-btn').addEventListener('click', () => {
+  order = [...new Set(wrongIndices)];
+  idx = 0;
+  correct = 0;
+  wrong = 0;
+  wrongIndices = [];
+  mode = 'review';
+  resultScreen.style.display = 'none';
+  quizScreen.style.display = 'block';
+  renderQuestion();
+  saveProgress();
+});
+
+document.getElementById('back-to-setup').addEventListener('click', () => {
+  clearProgress();
+  quizScreen.style.display = 'none';
+  setupScreen.style.display = 'block';
+});
+document.getElementById('edit-again-btn').addEventListener('click', () => {
+  resultScreen.style.display = 'none';
+  setupScreen.style.display = 'block';
+});
+document.getElementById('restart-btn').addEventListener('click', () => {
+  idx = 0; correct = 0; wrong = 0;
+  wrongIndices = [];
+  mode = 'normal';
+  order = quiz.map((_, i) => i);
+  if (shuffleOn) {
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  }
+  resultScreen.style.display = 'none';
+  quizScreen.style.display = 'block';
+  renderQuestion();
+  saveProgress();
+});
+</script>
+</body>
+</html>
