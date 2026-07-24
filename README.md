@@ -1,13 +1,13 @@
 # 自作クイズアプリ
 
-`index.html` を開くだけで動くクイズアプリです。フロントエンドは外部ライブラリなしの素のHTML/JS/CSSで、Cloudflare Pages Functions + KVを使ったクラウド機能（クイズセットの共有・回答者名での進捗保存・ランキング）を追加しています。
+`index.html` を開くだけで動くクイズアプリです。フロントエンドは外部ライブラリなしの素のHTML/JS/CSSで、Cloudflare Pages Functions + KVを使ったクラウド機能（クイズセットの共有・進捗保存・ランキング）を追加しています。
 
 ## 主な機能
 
-- クイズセットをCloudflare KVに保存し、トップページの一覧から選んで開始（`/api/quizzes`, `/api/quiz/:id`）
-- 回答者は名前を入力してから開始し、進捗（正解数・不正解数・最終更新日時など）を名前＋クイズセット単位でKVに保存。別のブラウザ・別の端末でも同じ名前を入れれば続きから再開できる
-- クイズセットごとの参加者一覧・正答率ランキングを見られる `/leaderboard.html`
-- パスワード保護された管理画面 `/admin.html` からクイズセット（question/answerの配列）を追加・編集・削除
+- クイズセットをCloudflare KVに保存し、トップページでカテゴリ（教科）ごとにグループ化された一覧から選んで開始（`/api/quizzes`, `/api/quiz/:id`）
+- 名前の入力は不要。初回アクセス時にブラウザの`localStorage`へランダムなデバイスIDを自動生成して保存し、以後はそれをキーに進捗（正解数・不正解数・最終更新日時など）をKVに保存。同じブラウザなら自動的に続きから再開できる（進捗データは1週間操作がないとKVのTTLで自動的に消える）
+- クイズセットごとの参加者を「参加者1」「参加者2」のように匿名化した正答率ランキングを見られる `/leaderboard.html`
+- パスワード保護された管理画面 `/admin.html` からクイズセット（question/answerの配列＋カテゴリ）を追加・編集・削除
 - JSONを直接貼り付け／`.json` ファイルをドラッグ&ドロップまたは選択して読み込み（この経路はKVを使わないローカル利用のみ。進捗は`localStorage`のみに保存）
 - シャッフル出題
 - 間違えた問題だけをもう一度出題する「復習モード」
@@ -17,7 +17,7 @@
 
 1. `index.html` をブラウザで開く
 2. 次のいずれかの方法で問題を読み込む
-   - 「クイズセットを選ぶ」一覧から選ぶ（KVにクイズセットが登録されている場合に表示。お名前の入力が必要）
+   - 「クイズセットを選ぶ」一覧から、カテゴリの下に並んだクイズセットを選ぶ（KVに登録されている場合に表示。クリックすると名前入力なしですぐ開始／前回の続きがあれば自動で再開）
    - `.json` ファイルをドロップエリアにドラッグ&ドロップ、または「ファイルを選択」ボタンで選ぶ
    - テキストエリアにJSONを直接貼り付ける
 3. 「クイズ開始」を押す（ファイル読み込み・クイズセット選択時は自動で開始します）
@@ -48,13 +48,13 @@ functions/
   _utils.js         KVキーの組み立て・認証チェックなど共通処理（URLルーティングの対象外）
   api/
     quizzes.js              GET  /api/quizzes            クイズセット一覧
-    quiz/index.js            POST /api/quiz                クイズセット追加（管理者のみ）
+    quiz/index.js            POST /api/quiz                クイズセット追加（管理者のみ。title/category/questions）
     quiz/[id].js              GET  /api/quiz/:id            クイズセット1件取得
                               PUT  /api/quiz/:id            クイズセット更新（管理者のみ）
                               DELETE /api/quiz/:id          クイズセット削除（管理者のみ）
-    progress/[name].js       GET  /api/progress/:name?quizId=xxx  進捗取得
-                              POST /api/progress/:name      進捗保存
-    leaderboard/[quizId].js  GET  /api/leaderboard/:quizId  ランキング取得
+    progress/[deviceId].js   GET  /api/progress/:deviceId?quizId=xxx  進捗取得
+                              POST /api/progress/:deviceId  進捗保存（TTL 1週間）
+    leaderboard/[quizId].js  GET  /api/leaderboard/:quizId  匿名化されたランキング取得
 wrangler.toml       プロジェクト基本設定のみ（KVバインディング・環境変数はダッシュボード側で設定）
 ```
 
@@ -62,12 +62,16 @@ wrangler.toml       プロジェクト基本設定のみ（KVバインディン�
 
 ### KVに保存するデータ
 
-| キー | 内容 |
-| --- | --- |
-| `index:quizzes` | クイズセット一覧（`[{id, title, count, updatedAt}]`） |
-| `quiz:<id>` | クイズセット本体（`{id, title, questions, createdAt, updatedAt}`） |
-| `progress:<quizId>:<name>` | 回答者ごとの進捗（`{name, quizId, idx, order, correct, wrong, wrongIndices, mode, answerMode, shuffleOn, completed, updatedAt}`） |
-| `index:progress:<quizId>` | そのクイズセットに回答したことがある名前の一覧（ランキング表示用） |
+| キー | 内容 | TTL |
+| --- | --- | --- |
+| `index:quizzes` | クイズセット一覧（`[{id, title, category, count, updatedAt}]`） | なし |
+| `quiz:<id>` | クイズセット本体（`{id, title, category, questions, createdAt, updatedAt}`） | なし |
+| `progress:<quizId>:<deviceId>` | デバイスごとの進捗（`{deviceId, quizId, idx, order, correct, wrong, wrongIndices, mode, answerMode, shuffleOn, completed, updatedAt}`） | 604800秒（1週間、保存のたびに更新） |
+| `index:progress:<quizId>` | そのクイズセットに回答したことがあるデバイスIDの一覧（ランキング表示用。TTL切れで消えたデバイスIDは参照時に自動的に取り除かれる） | なし |
+
+`category` を省略してクイズセットを作成・更新した場合は `未分類` として扱われます（既存のクイズセットも一覧・編集画面上は `未分類` として表示されます）。
+
+進捗データにはCloudflare KVの `expirationTtl` を使っているため、1週間操作がないデバイスの進捗は自動的に消えます。ランキングはデバイスIDを直接表示せず、KVに記録されている順（＝そのクイズに最初に参加した順）に「参加者1」「参加者2」...と匿名化して表示します。
 
 ## ローカルでの動作確認
 
@@ -112,9 +116,10 @@ KVバインディングと環境変数の追加・変更は、既存のデプロ
 
 ## GitHub Pagesで公開する場合の制限
 
-GitHub PagesはFunctions/KVのようなサーバー機能を持たない静的ホスティングです。`index.html` 単体は置けますが、`/api/*` が存在しないため「クイズセットを選ぶ」一覧・名前入力・ランキング・管理画面は動作しません（一覧取得が失敗するだけで、テキスト貼り付け／ファイル読み込みによるローカル利用は引き続き可能です）。クラウド機能を使う場合はCloudflare Pagesを利用してください。
+GitHub PagesはFunctions/KVのようなサーバー機能を持たない静的ホスティングです。`index.html` 単体は置けますが、`/api/*` が存在しないため「クイズセットを選ぶ」一覧・ランキング・管理画面は動作しません（一覧取得が失敗するだけで、テキスト貼り付け／ファイル読み込みによるローカル利用は引き続き可能です）。クラウド機能を使う場合はCloudflare Pagesを利用してください。
 
 ## データの保存について
 
-- クイズセットから開始した場合の進捗・成績は、名前とクイズセットIDをキーとしてCloudflare KVに保存されます（`localStorage`にも同時に保存され、同じブラウザでのリロード時はそちらを優先して即座に再開できます）
+- クイズセットから開始した場合の進捗・成績は、ブラウザの`localStorage`に自動生成されたデバイスIDとクイズセットIDをキーとしてCloudflare KVに保存されます（`localStorage`にも同時に保存され、同じブラウザでのリロード時はそちらを優先して即座に再開できます）。KV側の進捗は1週間操作がないと自動的に消えます
 - テキスト貼り付け・ファイル読み込みで開始した場合は、進捗は各ブラウザの `localStorage` にのみ保存されます（サーバーには送信されません）
+- デバイスIDは端末・ブラウザごとに別々に発行されるため、同じ人でも別のブラウザやシークレットモード、別の端末からは別デバイス（＝新規参加者）として扱われます

@@ -1,6 +1,8 @@
 import { json, progressKey, progressIndexKey } from '../../_utils.js';
 
-function decodeName(raw) {
+const PROGRESS_TTL_SECONDS = 604800; // 1週間操作がなければ自動的に消える
+
+function decodeParam(raw) {
   try {
     return decodeURIComponent(raw);
   } catch (e) {
@@ -11,15 +13,15 @@ function decodeName(raw) {
 export async function onRequestGet({ params, request, env }) {
   const url = new URL(request.url);
   const quizId = url.searchParams.get('quizId');
-  const name = decodeName(params.name);
+  const deviceId = decodeParam(params.deviceId);
   if (!quizId) return json({ error: 'quizId query param is required' }, 400);
-  const raw = await env.QUIZ_KV.get(progressKey(quizId, name));
+  const raw = await env.QUIZ_KV.get(progressKey(quizId, deviceId));
   return json(raw ? JSON.parse(raw) : null);
 }
 
 export async function onRequestPost({ params, request, env }) {
-  const name = decodeName(params.name);
-  if (!name || !name.trim()) return json({ error: 'name is required' }, 400);
+  const deviceId = decodeParam(params.deviceId);
+  if (!deviceId) return json({ error: 'deviceId is required' }, 400);
 
   let body;
   try {
@@ -33,7 +35,7 @@ export async function onRequestPost({ params, request, env }) {
 
   const now = new Date().toISOString();
   const record = {
-    name,
+    deviceId,
     quizId,
     idx: Number.isInteger(body.idx) ? body.idx : 0,
     order: Array.isArray(body.order) ? body.order : [],
@@ -46,14 +48,16 @@ export async function onRequestPost({ params, request, env }) {
     completed: !!body.completed,
     updatedAt: now,
   };
-  await env.QUIZ_KV.put(progressKey(quizId, name), JSON.stringify(record));
+  await env.QUIZ_KV.put(progressKey(quizId, deviceId), JSON.stringify(record), {
+    expirationTtl: PROGRESS_TTL_SECONDS,
+  });
 
   const idxKey = progressIndexKey(quizId);
   const idxRaw = await env.QUIZ_KV.get(idxKey);
-  const names = idxRaw ? JSON.parse(idxRaw) : [];
-  if (!names.includes(name)) {
-    names.push(name);
-    await env.QUIZ_KV.put(idxKey, JSON.stringify(names));
+  const ids = idxRaw ? JSON.parse(idxRaw) : [];
+  if (!ids.includes(deviceId)) {
+    ids.push(deviceId);
+    await env.QUIZ_KV.put(idxKey, JSON.stringify(ids));
   }
 
   return json(record);

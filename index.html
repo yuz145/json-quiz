@@ -65,6 +65,9 @@
   .dropzone.dragover { border-color: var(--accent); background: #eef4ee; color: var(--accent-dark); }
   .dropzone p { margin: 0 0 10px; }
   .dropzone .filename { font-size: 12px; color: var(--accent-dark); margin-top: 8px; }
+  .quiz-category-heading { font-size: 12px; font-weight: bold; color: var(--accent-dark); margin: 14px 0 6px; }
+  .quiz-category-heading:first-child { margin-top: 0; }
+  .quiz-category-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
   #quiz-screen { display: none; }
   .progress-bar-outer {
@@ -125,17 +128,7 @@
 
     <div id="quiz-sets-section" style="display:none; margin-bottom:16px;">
       <div class="q-label">クイズセットを選ぶ</div>
-      <div class="row" id="quiz-sets-list"></div>
-    </div>
-
-    <div id="name-entry-section" style="display:none; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
-      <div class="q-label" id="name-entry-title">クイズを開始します</div>
-      <div class="row">
-        <input type="text" id="player-name-input" placeholder="お名前" style="flex:1; padding:10px; border:1px solid var(--border); border-radius:8px; font-size:14px;">
-        <button class="primary" id="name-continue-btn">開始</button>
-        <button id="name-cancel-btn">キャンセル</button>
-      </div>
-      <div id="name-entry-msg" style="font-size:13px; color:var(--danger); margin-top:6px;"></div>
+      <div id="quiz-sets-list"></div>
     </div>
 
     <div class="dropzone" id="dropzone">
@@ -167,7 +160,6 @@
       <span id="q-counter">1 / 10問</span>
       <span class="score">正解 <span id="correct-count">0</span> / 不正解 <span id="wrong-count">0</span></span>
     </div>
-    <div id="player-label" style="display:none; font-size:12px; color:var(--muted); margin:-14px 0 14px;"></div>
     <div class="card">
       <div class="q-label">問題</div>
       <div class="q-text" id="q-text"></div>
@@ -219,8 +211,6 @@ let wrongIndices = [];
 let mode = 'normal'; // 'normal' | 'review'
 let answerMode = 'self'; // 'self' | 'type'
 let currentQuizId = null;   // KV上のクイズID（貼り付け/ファイル読み込みの場合はnull）
-let currentPlayerName = null;
-let pendingQuizSet = null;  // クイズセット選択後、名前入力待ちの間に保持する {id, title, questions}
 
 const setupScreen = document.getElementById('setup-screen');
 const quizScreen = document.getElementById('quiz-screen');
@@ -228,11 +218,34 @@ const resultScreen = document.getElementById('result-screen');
 const errorBox = document.getElementById('error');
 
 const STORAGE_KEY = 'quizAppProgress_v1';
+const DEVICE_ID_KEY = 'quizAppDeviceId';
+
+function getOrCreateDeviceId() {
+  let id = null;
+  try {
+    id = localStorage.getItem(DEVICE_ID_KEY);
+  } catch (e) {
+    // localStorageが使えない場合はセッション限りのIDになる
+  }
+  if (!id) {
+    id = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    try {
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    } catch (e) {
+      // 保存できなくても続行する（次回アクセス時は新しいIDになる）
+    }
+  }
+  return id;
+}
+
+const deviceId = getOrCreateDeviceId();
 
 function saveProgress() {
   const data = {
     quiz, order, idx, correct, wrong, shuffleOn, wrongIndices, mode, answerMode,
-    currentQuizId, currentPlayerName,
+    currentQuizId,
     savedAt: Date.now()
   };
   try {
@@ -240,14 +253,14 @@ function saveProgress() {
   } catch (e) {
     // localStorageが使えない環境（容量超過等）では黙って諦める
   }
-  if (currentQuizId && currentPlayerName) {
+  if (currentQuizId) {
     saveServerProgress(false);
   }
 }
 
 async function saveServerProgress(completed) {
   try {
-    await fetch('/api/progress/' + encodeURIComponent(currentPlayerName), {
+    await fetch('/api/progress/' + encodeURIComponent(deviceId), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -296,7 +309,6 @@ function checkResume() {
     mode = data.mode || 'normal';
     answerMode = data.answerMode || 'self';
     currentQuizId = data.currentQuizId || null;
-    currentPlayerName = data.currentPlayerName || null;
     document.getElementById('answer-mode-toggle').textContent = '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点');
     banner.style.display = 'none';
     setupScreen.style.display = 'none';
@@ -320,14 +332,33 @@ async function loadQuizSetList() {
     if (!Array.isArray(list) || list.length === 0) return;
     const container = document.getElementById('quiz-sets-list');
     container.innerHTML = '';
+
+    const groups = new Map();
     list.forEach(entry => {
       if (!entry || typeof entry.id !== 'string') return;
-      const btn = document.createElement('button');
-      btn.textContent = (entry.title || entry.id) + '（' + (entry.count || 0) + '問）';
-      btn.addEventListener('click', () => selectQuizSet(entry.id, entry.title || entry.id));
-      container.appendChild(btn);
+      const category = entry.category || '未分類';
+      if (!groups.has(category)) groups.set(category, []);
+      groups.get(category).push(entry);
     });
-    if (container.children.length > 0) {
+
+    groups.forEach((entries, category) => {
+      const heading = document.createElement('div');
+      heading.className = 'quiz-category-heading';
+      heading.textContent = category;
+      container.appendChild(heading);
+
+      const row = document.createElement('div');
+      row.className = 'quiz-category-row';
+      entries.forEach(entry => {
+        const btn = document.createElement('button');
+        btn.textContent = (entry.title || entry.id) + '（' + (entry.count || 0) + '問）';
+        btn.addEventListener('click', () => openQuizSet(entry.id, entry.title || entry.id));
+        row.appendChild(btn);
+      });
+      container.appendChild(row);
+    });
+
+    if (groups.size > 0) {
       document.getElementById('quiz-sets-section').style.display = 'block';
     }
   } catch (e) {
@@ -336,76 +367,44 @@ async function loadQuizSetList() {
   }
 }
 
-async function selectQuizSet(id, title) {
+async function openQuizSet(id, title) {
   errorBox.textContent = '';
   try {
     const res = await fetch('/api/quiz/' + encodeURIComponent(id));
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    pendingQuizSet = { id: data.id, title: data.title || title, questions: data.questions };
-    document.getElementById('name-entry-title').textContent = '「' + pendingQuizSet.title + '」を開始します。お名前を入力してください。';
-    document.getElementById('name-entry-msg').textContent = '';
-    document.getElementById('player-name-input').value = currentPlayerName || '';
-    document.getElementById('name-entry-section').style.display = 'block';
+    currentQuizId = data.id;
+
+    let existing = null;
+    try {
+      const progRes = await fetch('/api/progress/' + encodeURIComponent(deviceId) + '?quizId=' + encodeURIComponent(currentQuizId));
+      if (progRes.ok) existing = await progRes.json();
+    } catch (e) {
+      // サーバー側の進捗が取れなくても、新規開始として続行する
+    }
+
+    if (existing && !existing.completed && Array.isArray(existing.order) && existing.order.length > 0) {
+      quiz = data.questions;
+      order = existing.order;
+      idx = existing.idx;
+      correct = existing.correct;
+      wrong = existing.wrong;
+      wrongIndices = existing.wrongIndices || [];
+      mode = existing.mode || 'normal';
+      answerMode = existing.answerMode || answerMode;
+      shuffleOn = !!existing.shuffleOn;
+      document.getElementById('answer-mode-toggle').textContent = '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点');
+      setupScreen.style.display = 'none';
+      resultScreen.style.display = 'none';
+      quizScreen.style.display = 'block';
+      renderQuestion();
+      saveProgress();
+    } else {
+      startQuizFromArray(data.questions);
+    }
   } catch (e) {
     errorBox.textContent = 'クイズセットの読み込みに失敗しました:\n' + e.message;
   }
-}
-
-document.getElementById('name-cancel-btn').addEventListener('click', () => {
-  pendingQuizSet = null;
-  document.getElementById('name-entry-section').style.display = 'none';
-});
-
-document.getElementById('name-continue-btn').addEventListener('click', beginServerQuiz);
-document.getElementById('player-name-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    beginServerQuiz();
-  }
-});
-
-async function beginServerQuiz() {
-  const name = document.getElementById('player-name-input').value.trim();
-  if (!name) {
-    document.getElementById('name-entry-msg').textContent = 'お名前を入力してください。';
-    return;
-  }
-  if (!pendingQuizSet) return;
-
-  currentQuizId = pendingQuizSet.id;
-  currentPlayerName = name;
-
-  let existing = null;
-  try {
-    const res = await fetch('/api/progress/' + encodeURIComponent(name) + '?quizId=' + encodeURIComponent(currentQuizId));
-    if (res.ok) existing = await res.json();
-  } catch (e) {
-    // サーバー側の進捗が取れなくても、新規開始として続行する
-  }
-
-  document.getElementById('name-entry-section').style.display = 'none';
-
-  if (existing && !existing.completed && Array.isArray(existing.order) && existing.order.length > 0) {
-    quiz = pendingQuizSet.questions;
-    order = existing.order;
-    idx = existing.idx;
-    correct = existing.correct;
-    wrong = existing.wrong;
-    wrongIndices = existing.wrongIndices || [];
-    mode = existing.mode || 'normal';
-    answerMode = existing.answerMode || answerMode;
-    shuffleOn = !!existing.shuffleOn;
-    document.getElementById('answer-mode-toggle').textContent = '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点');
-    setupScreen.style.display = 'none';
-    resultScreen.style.display = 'none';
-    quizScreen.style.display = 'block';
-    renderQuestion();
-    saveProgress();
-  } else {
-    startQuizFromArray(pendingQuizSet.questions);
-  }
-  pendingQuizSet = null;
 }
 
 loadQuizSetList();
@@ -466,8 +465,6 @@ function startQuizFromArray(data) {
 
 document.getElementById('start-btn').addEventListener('click', () => {
   currentQuizId = null;
-  currentPlayerName = null;
-  pendingQuizSet = null;
   startQuizFromText(document.getElementById('json-input').value);
 });
 
@@ -482,8 +479,6 @@ function loadJsonFile(file) {
   const reader = new FileReader();
   reader.onload = () => {
     currentQuizId = null;
-    currentPlayerName = null;
-    pendingQuizSet = null;
     document.getElementById('json-input').value = reader.result;
     dzName.textContent = '読み込み済み: ' + file.name;
     startQuizFromText(reader.result);
@@ -545,13 +540,6 @@ function renderQuestion() {
   }
   document.getElementById('q-counter').textContent = (idx + 1) + ' / ' + order.length + '問' + (mode === 'review' ? '（復習）' : '');
   document.getElementById('progress-bar').style.width = Math.round(((idx) / order.length) * 100) + '%';
-  const playerLabel = document.getElementById('player-label');
-  if (currentPlayerName) {
-    playerLabel.textContent = 'プレイヤー: ' + currentPlayerName;
-    playerLabel.style.display = 'block';
-  } else {
-    playerLabel.style.display = 'none';
-  }
   document.getElementById('correct-count').textContent = correct;
   document.getElementById('wrong-count').textContent = wrong;
 }

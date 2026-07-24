@@ -29,8 +29,14 @@ export function quizKey(id) {
   return 'quiz:' + id;
 }
 
-export function progressKey(quizId, name) {
-  return 'progress:' + quizId + ':' + name;
+export const DEFAULT_CATEGORY = '未分類';
+
+export function normalizeCategory(category) {
+  return typeof category === 'string' && category.trim() ? category.trim() : DEFAULT_CATEGORY;
+}
+
+export function progressKey(quizId, deviceId) {
+  return 'progress:' + quizId + ':' + deviceId;
 }
 
 export function progressIndexKey(quizId) {

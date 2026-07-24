@@ -2,17 +2,20 @@ import { json, progressKey, progressIndexKey } from '../../_utils.js';
 
 export async function onRequestGet({ params, env }) {
   const quizId = params.quizId;
-  const idxRaw = await env.QUIZ_KV.get(progressIndexKey(quizId));
-  const names = idxRaw ? JSON.parse(idxRaw) : [];
+  const idxKey = progressIndexKey(quizId);
+  const idxRaw = await env.QUIZ_KV.get(idxKey);
+  const deviceIds = idxRaw ? JSON.parse(idxRaw) : [];
 
   const results = [];
-  for (const name of names) {
-    const raw = await env.QUIZ_KV.get(progressKey(quizId, name));
-    if (!raw) continue;
+  const stillValid = [];
+  for (const deviceId of deviceIds) {
+    const raw = await env.QUIZ_KV.get(progressKey(quizId, deviceId));
+    if (!raw) continue; // TTL経過で消えた参加者は一覧からも外す
+    stillValid.push(deviceId);
     const p = JSON.parse(raw);
     const total = p.correct + p.wrong;
     results.push({
-      name: p.name,
+      label: '参加者' + stillValid.length,
       correct: p.correct,
       wrong: p.wrong,
       total,
@@ -21,6 +24,10 @@ export async function onRequestGet({ params, env }) {
       updatedAt: p.updatedAt,
     });
   }
+  if (stillValid.length !== deviceIds.length) {
+    await env.QUIZ_KV.put(idxKey, JSON.stringify(stillValid));
+  }
+
   results.sort((a, b) => b.rate - a.rate || b.total - a.total);
   return json(results);
 }

@@ -64,7 +64,7 @@
       <thead>
         <tr>
           <th class="rank">順位</th>
-          <th>名前</th>
+          <th>参加者</th>
           <th>正解</th>
           <th>不正解</th>
           <th>正答率</th>
@@ -138,7 +138,7 @@ async function loadLeaderboard(quizId) {
       const updated = r.updatedAt ? new Date(r.updatedAt).toLocaleString('ja-JP') : '';
       tr.innerHTML =
         '<td class="rank">' + (i + 1) + '</td>' +
-        '<td>' + escapeHtml(r.name) + '</td>' +
+        '<td>' + escapeHtml(r.label) + '</td>' +
         '<td>' + r.correct + '</td>' +
         '<td>' + r.wrong + '</td>' +
         '<td class="rate">' + r.rate + '%</td>' +

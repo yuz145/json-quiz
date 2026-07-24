@@ -95,6 +95,9 @@
     <div class="card">
       <label for="title-input">タイトル</label>
       <input type="text" id="title-input" placeholder="例: 地理クイズ">
+      <label for="category-input">カテゴリ（教科）</label>
+      <input type="text" id="category-input" list="category-list" placeholder="例: 国語、数学、歴史（未入力の場合は「未分類」）">
+      <datalist id="category-list"></datalist>
       <label for="questions-input">問題（JSON配列: question と answer を持つオブジェクト）</label>
       <textarea id="questions-input">[
   { "question": "日本の首都は？", "answer": "東京" },
@@ -156,34 +159,64 @@ async function loadQuizList() {
   try {
     const res = await fetch('/api/quizzes');
     const list = await res.json();
+    updateCategoryOptions(list);
     if (!Array.isArray(list) || list.length === 0) {
       emptyEl.style.display = 'block';
       return;
     }
     emptyEl.style.display = 'none';
+
+    const groups = new Map();
     list.forEach(entry => {
-      const row = document.createElement('div');
-      row.className = 'quiz-item';
-      row.innerHTML =
-        '<div><div class="title">' + escapeHtml(entry.title) + '</div>' +
-        '<div class="meta">ID: ' + escapeHtml(entry.id) + ' ／ ' + entry.count + '問 ／ 更新: ' + escapeHtml(entry.updatedAt || '') + '</div></div>';
-      const btnWrap = document.createElement('div');
-      btnWrap.className = 'row';
-      const editBtn = document.createElement('button');
-      editBtn.textContent = '編集';
-      editBtn.addEventListener('click', () => loadForEdit(entry.id));
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'danger';
-      deleteBtn.textContent = '削除';
-      deleteBtn.addEventListener('click', () => deleteQuiz(entry.id, entry.title));
-      btnWrap.appendChild(editBtn);
-      btnWrap.appendChild(deleteBtn);
-      row.appendChild(btnWrap);
-      listEl.appendChild(row);
+      const category = entry.category || '未分類';
+      if (!groups.has(category)) groups.set(category, []);
+      groups.get(category).push(entry);
+    });
+
+    groups.forEach((entries, category) => {
+      const heading = document.createElement('div');
+      heading.style.cssText = 'font-size:12px; font-weight:bold; color:var(--accent-dark); margin:14px 0 4px;';
+      heading.textContent = category;
+      listEl.appendChild(heading);
+
+      entries.forEach(entry => {
+        const row = document.createElement('div');
+        row.className = 'quiz-item';
+        row.innerHTML =
+          '<div><div class="title">' + escapeHtml(entry.title) + '</div>' +
+          '<div class="meta">ID: ' + escapeHtml(entry.id) + ' ／ ' + entry.count + '問 ／ 更新: ' + escapeHtml(entry.updatedAt || '') + '</div></div>';
+        const btnWrap = document.createElement('div');
+        btnWrap.className = 'row';
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '編集';
+        editBtn.addEventListener('click', () => loadForEdit(entry.id));
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'danger';
+        deleteBtn.textContent = '削除';
+        deleteBtn.addEventListener('click', () => deleteQuiz(entry.id, entry.title));
+        btnWrap.appendChild(editBtn);
+        btnWrap.appendChild(deleteBtn);
+        row.appendChild(btnWrap);
+        listEl.appendChild(row);
+      });
     });
   } catch (e) {
     errorBox.textContent = '一覧の取得に失敗しました:\n' + e.message;
   }
+}
+
+function updateCategoryOptions(list) {
+  const datalist = document.getElementById('category-list');
+  datalist.innerHTML = '';
+  const categories = new Set(['未分類']);
+  if (Array.isArray(list)) {
+    list.forEach(entry => categories.add(entry.category || '未分類'));
+  }
+  categories.forEach(category => {
+    const opt = document.createElement('option');
+    opt.value = category;
+    datalist.appendChild(opt);
+  });
 }
 
 function escapeHtml(s) {
@@ -199,6 +232,7 @@ async function loadForEdit(id) {
     const data = await res.json();
     editingId = id;
     document.getElementById('title-input').value = data.title;
+    document.getElementById('category-input').value = data.category || '未分類';
     document.getElementById('questions-input').value = JSON.stringify(data.questions, null, 2);
     document.getElementById('form-title').textContent = '「' + data.title + '」を編集';
     document.getElementById('save-btn').textContent = '更新する';
@@ -214,6 +248,7 @@ document.getElementById('cancel-edit-btn').addEventListener('click', resetForm);
 function resetForm() {
   editingId = null;
   document.getElementById('title-input').value = '';
+  document.getElementById('category-input').value = '';
   document.getElementById('questions-input').value = '[\n  { "question": "", "answer": "" }\n]';
   document.getElementById('form-title').textContent = '新しいクイズセットを追加';
   document.getElementById('save-btn').textContent = '追加する';
@@ -245,6 +280,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
   errorBox.textContent = '';
   statusMsg.textContent = '';
   const title = document.getElementById('title-input').value.trim();
+  const category = document.getElementById('category-input').value.trim() || '未分類';
   const rawQuestions = document.getElementById('questions-input').value;
 
   if (!title) {
@@ -275,7 +311,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
     const res = await fetch(url, {
       method,
       headers: authHeaders(),
-      body: JSON.stringify({ title, questions }),
+      body: JSON.stringify({ title, category, questions }),
     });
     if (res.status === 401) {
       errorBox.textContent = 'パスワードが違います。ログインし直してください。';
