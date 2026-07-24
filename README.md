@@ -55,7 +55,7 @@ functions/
     progress/[name].js       GET  /api/progress/:name?quizId=xxx  進捗取得
                               POST /api/progress/:name      進捗保存
     leaderboard/[quizId].js  GET  /api/leaderboard/:quizId  ランキング取得
-wrangler.toml       ローカル開発 (`wrangler pages dev`) 用のKVバインディング定義
+wrangler.toml       プロジェクト基本設定のみ（KVバインディング・環境変数はダッシュボード側で設定）
 ```
 
 管理者判定は、リクエストヘッダー `X-Admin-Password` と環境変数 `ADMIN_PASSWORD` を比較するだけの簡易的なものです。`ADMIN_PASSWORD` が未設定の場合は常に401を返すため、設定を忘れると管理画面は動きません。HTTPS前提（Cloudflare Pagesは標準でHTTPS）で、パスワードを知っている人だけに管理画面のURLを共有する運用を想定しています。本格的な認可基盤ではないので、社外に公開する管理画面としては不十分な点に留意してください。
