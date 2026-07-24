@@ -1,13 +1,13 @@
-import { json, isAdmin, quizKey, getQuizIndex, saveQuizIndex, validateQuestions, normalizeCategory } from '../../_utils.js';
+import { json, isAdmin, quizKey, getQuizIndex, saveQuizIndex, validateQuestions, normalizeCategory, safe } from '../../_utils.js';
 
-export async function onRequestGet({ params, env }) {
+export const onRequestGet = safe(async ({ params, env }) => {
   const raw = await env.QUIZ_KV.get(quizKey(params.id));
   if (!raw) return json({ error: 'not found' }, 404);
   const data = JSON.parse(raw);
   return json({ ...data, category: normalizeCategory(data.category) });
-}
+});
 
-export async function onRequestPut({ request, env, params }) {
+export const onRequestPut = safe(async ({ request, env, params }) => {
   if (!isAdmin(request, env)) {
     return json({ error: 'unauthorized' }, 401);
   }
@@ -40,9 +40,9 @@ export async function onRequestPut({ request, env, params }) {
   await saveQuizIndex(env, list);
 
   return json(updated);
-}
+});
 
-export async function onRequestDelete({ request, env, params }) {
+export const onRequestDelete = safe(async ({ request, env, params }) => {
   if (!isAdmin(request, env)) {
     return json({ error: 'unauthorized' }, 401);
   }
@@ -50,4 +50,4 @@ export async function onRequestDelete({ request, env, params }) {
   const list = await getQuizIndex(env);
   await saveQuizIndex(env, list.filter(x => x.id !== params.id));
   return json({ ok: true });
-}
+});

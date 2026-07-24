@@ -1,6 +1,6 @@
-import { json, isAdmin, generateId, quizKey, getQuizIndex, saveQuizIndex, validateQuestions, normalizeCategory } from '../../_utils.js';
+import { json, isAdmin, generateId, quizKey, getQuizIndex, saveQuizIndex, validateQuestions, normalizeCategory, safe } from '../../_utils.js';
 
-export async function onRequestPost({ request, env }) {
+export const onRequestPost = safe(async ({ request, env }) => {
   if (!isAdmin(request, env)) {
     return json({ error: 'unauthorized' }, 401);
   }
@@ -28,4 +28,4 @@ export async function onRequestPost({ request, env }) {
   await saveQuizIndex(env, list);
 
   return json(quiz, 201);
-}
+});

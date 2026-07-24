@@ -55,8 +55,9 @@ functions/
     progress/[deviceId].js   GET  /api/progress/:deviceId?quizId=xxx  進捗取得
                               POST /api/progress/:deviceId  進捗保存（TTL 1週間）
     leaderboard/[quizId].js  GET  /api/leaderboard/:quizId  匿名化されたランキング取得
-wrangler.toml       プロジェクト基本設定のみ（KVバインディング・環境変数はダッシュボード側で設定）
 ```
+
+このプロジェクトは `wrangler.toml` を使用しません。KVバインディング（`QUIZ_KV`）と環境変数（`ADMIN_PASSWORD`）は、Cloudflareダッシュボードのプロジェクト設定画面（Settings → Functions / Environment variables）でのみ設定します。
 
 管理者判定は、リクエストヘッダー `X-Admin-Password` と環境変数 `ADMIN_PASSWORD` を比較するだけの簡易的なものです。`ADMIN_PASSWORD` が未設定の場合は常に401を返すため、設定を忘れると管理画面は動きません。HTTPS前提（Cloudflare Pagesは標準でHTTPS）で、パスワードを知っている人だけに管理画面のURLを共有する運用を想定しています。本格的な認可基盤ではないので、社外に公開する管理画面としては不十分な点に留意してください。
 
@@ -75,12 +76,12 @@ wrangler.toml       プロジェクト基本設定のみ（KVバインディン�
 
 ## ローカルでの動作確認
 
-Cloudflare PagesのFunctions/KVはローカルでも `wrangler pages dev` でシミュレートできます（Cloudflareアカウント不要）。
+Cloudflare PagesのFunctions/KVはローカルでも `wrangler pages dev` でシミュレートできます（Cloudflareアカウント不要、`wrangler.toml` は使わずコマンドラインオプションだけで完結します）。
 
 ```bash
 npm install -g wrangler   # 未インストールの場合
 echo "ADMIN_PASSWORD=好きなパスワード" > .dev.vars
-wrangler pages dev . --kv QUIZ_KV --port 8788
+wrangler pages dev . --kv QUIZ_KV --port 8788 --compatibility-date=2024-09-23
 ```
 
 - `.dev.vars` はローカル専用の秘密情報なので `.gitignore` 済みです。コミットしないでください

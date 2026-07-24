@@ -1,6 +1,6 @@
-import { json, progressKey, progressIndexKey } from '../../_utils.js';
+import { json, progressKey, progressIndexKey, safe } from '../../_utils.js';
 
-export async function onRequestGet({ params, env }) {
+export const onRequestGet = safe(async ({ params, env }) => {
   const quizId = params.quizId;
   const idxKey = progressIndexKey(quizId);
   const idxRaw = await env.QUIZ_KV.get(idxKey);
@@ -30,4 +30,4 @@ export async function onRequestGet({ params, env }) {
 
   results.sort((a, b) => b.rate - a.rate || b.total - a.total);
   return json(results);
-}
+});

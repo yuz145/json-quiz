@@ -1,4 +1,4 @@
-import { json, progressKey, progressIndexKey } from '../../_utils.js';
+import { json, progressKey, progressIndexKey, safe } from '../../_utils.js';
 
 const PROGRESS_TTL_SECONDS = 604800; // 1週間操作がなければ自動的に消える
 
@@ -10,16 +10,16 @@ function decodeParam(raw) {
   }
 }
 
-export async function onRequestGet({ params, request, env }) {
+export const onRequestGet = safe(async ({ params, request, env }) => {
   const url = new URL(request.url);
   const quizId = url.searchParams.get('quizId');
   const deviceId = decodeParam(params.deviceId);
   if (!quizId) return json({ error: 'quizId query param is required' }, 400);
   const raw = await env.QUIZ_KV.get(progressKey(quizId, deviceId));
   return json(raw ? JSON.parse(raw) : null);
-}
+});
 
-export async function onRequestPost({ params, request, env }) {
+export const onRequestPost = safe(async ({ params, request, env }) => {
   const deviceId = decodeParam(params.deviceId);
   if (!deviceId) return json({ error: 'deviceId is required' }, 400);
 
@@ -61,4 +61,4 @@ export async function onRequestPost({ params, request, env }) {
   }
 
   return json(record);
-}
+});

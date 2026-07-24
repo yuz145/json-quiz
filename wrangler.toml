@@ -1,8 +1,0 @@
-name = "json-quiz"
-compatibility_date = "2024-09-23"
-pages_build_output_dir = "."
-
-# KVバインディング(QUIZ_KV)と環境変数(ADMIN_PASSWORD)は
-# Cloudflareダッシュボードのプロジェクト設定 (Settings > Functions / Environment variables) で行います。
-# ローカル開発 (`wrangler pages dev`) でKVを使う場合は、このファイルに書く代わりに
-# `wrangler pages dev . --kv QUIZ_KV` のようにコマンドラインオプションで指定してください（README参照）。

@@ -10,6 +10,18 @@ export function isAdmin(request, env) {
   return !!env.ADMIN_PASSWORD && header === env.ADMIN_PASSWORD;
 }
 
+// KVの一時的な障害やクォータ超過などで例外が飛んだ場合に、生の500ページではなく
+// 原因を含んだJSONを返す。これがないと呼び出し側は「HTTP 500」としか分からない。
+export function safe(handler) {
+  return async (context) => {
+    try {
+      return await handler(context);
+    } catch (e) {
+      return json({ error: 'internal error: ' + (e && e.message ? e.message : String(e)) }, 500);
+    }
+  };
+}
+
 export function generateId() {
   return 'q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
