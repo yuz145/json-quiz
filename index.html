@@ -128,6 +128,16 @@
       <div class="row" id="quiz-sets-list"></div>
     </div>
 
+    <div id="name-entry-section" style="display:none; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+      <div class="q-label" id="name-entry-title">クイズを開始します</div>
+      <div class="row">
+        <input type="text" id="player-name-input" placeholder="お名前" style="flex:1; padding:10px; border:1px solid var(--border); border-radius:8px; font-size:14px;">
+        <button class="primary" id="name-continue-btn">開始</button>
+        <button id="name-cancel-btn">キャンセル</button>
+      </div>
+      <div id="name-entry-msg" style="font-size:13px; color:var(--danger); margin-top:6px;"></div>
+    </div>
+
     <div class="dropzone" id="dropzone">
       <p>.json ファイルをここにドラッグ&amp;ドロップ、または</p>
       <button id="file-select-btn">ファイルを選択</button>
@@ -157,6 +167,7 @@
       <span id="q-counter">1 / 10問</span>
       <span class="score">正解 <span id="correct-count">0</span> / 不正解 <span id="wrong-count">0</span></span>
     </div>
+    <div id="player-label" style="display:none; font-size:12px; color:var(--muted); margin:-14px 0 14px;"></div>
     <div class="card">
       <div class="q-label">問題</div>
       <div class="q-text" id="q-text"></div>
@@ -190,6 +201,9 @@
     <button class="primary" id="review-btn" style="display:none;">間違えた問題を復習する（<span id="review-count">0</span>問）</button>
     <button id="restart-btn">もう一度挑戦</button>
     <button id="edit-again-btn">問題を編集</button>
+    <div id="leaderboard-link-wrap" style="display:none; margin-top:14px;">
+      <a id="leaderboard-link" href="#" target="_blank" rel="noopener">このクイズのランキングを見る</a>
+    </div>
   </div>
 
 </div>
@@ -204,6 +218,9 @@ let shuffleOn = false;
 let wrongIndices = [];
 let mode = 'normal'; // 'normal' | 'review'
 let answerMode = 'self'; // 'self' | 'type'
+let currentQuizId = null;   // KV上のクイズID（貼り付け/ファイル読み込みの場合はnull）
+let currentPlayerName = null;
+let pendingQuizSet = null;  // クイズセット選択後、名前入力待ちの間に保持する {id, title, questions}
 
 const setupScreen = document.getElementById('setup-screen');
 const quizScreen = document.getElementById('quiz-screen');
@@ -215,12 +232,31 @@ const STORAGE_KEY = 'quizAppProgress_v1';
 function saveProgress() {
   const data = {
     quiz, order, idx, correct, wrong, shuffleOn, wrongIndices, mode, answerMode,
+    currentQuizId, currentPlayerName,
     savedAt: Date.now()
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
     // localStorageが使えない環境（容量超過等）では黙って諦める
+  }
+  if (currentQuizId && currentPlayerName) {
+    saveServerProgress(false);
+  }
+}
+
+async function saveServerProgress(completed) {
+  try {
+    await fetch('/api/progress/' + encodeURIComponent(currentPlayerName), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        quizId: currentQuizId, idx, order, correct, wrong, wrongIndices,
+        mode, answerMode, shuffleOn, completed: !!completed
+      })
+    });
+  } catch (e) {
+    // オフライン等で保存に失敗しても、ローカルの進行は止めない
   }
 }
 
@@ -259,6 +295,8 @@ function checkResume() {
     wrongIndices = data.wrongIndices || [];
     mode = data.mode || 'normal';
     answerMode = data.answerMode || 'self';
+    currentQuizId = data.currentQuizId || null;
+    currentPlayerName = data.currentPlayerName || null;
     document.getElementById('answer-mode-toggle').textContent = '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点');
     banner.style.display = 'none';
     setupScreen.style.display = 'none';
@@ -276,39 +314,98 @@ checkResume();
 
 async function loadQuizSetList() {
   try {
-    const res = await fetch('quizzes/index.json');
+    const res = await fetch('/api/quizzes');
     if (!res.ok) return;
     const list = await res.json();
     if (!Array.isArray(list) || list.length === 0) return;
     const container = document.getElementById('quiz-sets-list');
     container.innerHTML = '';
     list.forEach(entry => {
-      if (!entry || typeof entry.file !== 'string') return;
+      if (!entry || typeof entry.id !== 'string') return;
       const btn = document.createElement('button');
-      btn.textContent = entry.title || entry.file;
-      btn.addEventListener('click', () => loadQuizSetFile(entry.file));
+      btn.textContent = (entry.title || entry.id) + '（' + (entry.count || 0) + '問）';
+      btn.addEventListener('click', () => selectQuizSet(entry.id, entry.title || entry.id));
       container.appendChild(btn);
     });
     if (container.children.length > 0) {
       document.getElementById('quiz-sets-section').style.display = 'block';
     }
   } catch (e) {
-    // quizzes/index.json が無い、または file:// で開いていて fetch できない場合は
+    // /api/quizzes が使えない（Functions未設定・KV未バインド等）場合は
     // 手動入力・ファイル読み込みのみ表示する
   }
 }
 
-async function loadQuizSetFile(file) {
+async function selectQuizSet(id, title) {
   errorBox.textContent = '';
   try {
-    const res = await fetch('quizzes/' + file);
+    const res = await fetch('/api/quiz/' + encodeURIComponent(id));
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const text = await res.text();
-    document.getElementById('json-input').value = text;
-    startQuizFromText(text);
+    const data = await res.json();
+    pendingQuizSet = { id: data.id, title: data.title || title, questions: data.questions };
+    document.getElementById('name-entry-title').textContent = '「' + pendingQuizSet.title + '」を開始します。お名前を入力してください。';
+    document.getElementById('name-entry-msg').textContent = '';
+    document.getElementById('player-name-input').value = currentPlayerName || '';
+    document.getElementById('name-entry-section').style.display = 'block';
   } catch (e) {
     errorBox.textContent = 'クイズセットの読み込みに失敗しました:\n' + e.message;
   }
+}
+
+document.getElementById('name-cancel-btn').addEventListener('click', () => {
+  pendingQuizSet = null;
+  document.getElementById('name-entry-section').style.display = 'none';
+});
+
+document.getElementById('name-continue-btn').addEventListener('click', beginServerQuiz);
+document.getElementById('player-name-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    beginServerQuiz();
+  }
+});
+
+async function beginServerQuiz() {
+  const name = document.getElementById('player-name-input').value.trim();
+  if (!name) {
+    document.getElementById('name-entry-msg').textContent = 'お名前を入力してください。';
+    return;
+  }
+  if (!pendingQuizSet) return;
+
+  currentQuizId = pendingQuizSet.id;
+  currentPlayerName = name;
+
+  let existing = null;
+  try {
+    const res = await fetch('/api/progress/' + encodeURIComponent(name) + '?quizId=' + encodeURIComponent(currentQuizId));
+    if (res.ok) existing = await res.json();
+  } catch (e) {
+    // サーバー側の進捗が取れなくても、新規開始として続行する
+  }
+
+  document.getElementById('name-entry-section').style.display = 'none';
+
+  if (existing && !existing.completed && Array.isArray(existing.order) && existing.order.length > 0) {
+    quiz = pendingQuizSet.questions;
+    order = existing.order;
+    idx = existing.idx;
+    correct = existing.correct;
+    wrong = existing.wrong;
+    wrongIndices = existing.wrongIndices || [];
+    mode = existing.mode || 'normal';
+    answerMode = existing.answerMode || answerMode;
+    shuffleOn = !!existing.shuffleOn;
+    document.getElementById('answer-mode-toggle').textContent = '回答モード: ' + (answerMode === 'self' ? '自己採点' : '入力して採点');
+    setupScreen.style.display = 'none';
+    resultScreen.style.display = 'none';
+    quizScreen.style.display = 'block';
+    renderQuestion();
+    saveProgress();
+  } else {
+    startQuizFromArray(pendingQuizSet.questions);
+  }
+  pendingQuizSet = null;
 }
 
 loadQuizSetList();
@@ -342,6 +439,10 @@ function startQuizFromText(jsonText) {
       return false;
     }
   }
+  return startQuizFromArray(data);
+}
+
+function startQuizFromArray(data) {
   quiz = data;
   order = quiz.map((_, i) => i);
   if (shuffleOn) {
@@ -364,6 +465,9 @@ function startQuizFromText(jsonText) {
 }
 
 document.getElementById('start-btn').addEventListener('click', () => {
+  currentQuizId = null;
+  currentPlayerName = null;
+  pendingQuizSet = null;
   startQuizFromText(document.getElementById('json-input').value);
 });
 
@@ -377,6 +481,9 @@ function loadJsonFile(file) {
   }
   const reader = new FileReader();
   reader.onload = () => {
+    currentQuizId = null;
+    currentPlayerName = null;
+    pendingQuizSet = null;
     document.getElementById('json-input').value = reader.result;
     dzName.textContent = '読み込み済み: ' + file.name;
     startQuizFromText(reader.result);
@@ -438,6 +545,13 @@ function renderQuestion() {
   }
   document.getElementById('q-counter').textContent = (idx + 1) + ' / ' + order.length + '問' + (mode === 'review' ? '（復習）' : '');
   document.getElementById('progress-bar').style.width = Math.round(((idx) / order.length) * 100) + '%';
+  const playerLabel = document.getElementById('player-label');
+  if (currentPlayerName) {
+    playerLabel.textContent = 'プレイヤー: ' + currentPlayerName;
+    playerLabel.style.display = 'block';
+  } else {
+    playerLabel.style.display = 'none';
+  }
   document.getElementById('correct-count').textContent = correct;
   document.getElementById('wrong-count').textContent = wrong;
 }
@@ -503,6 +617,14 @@ document.getElementById('next-btn').addEventListener('click', () => {
       document.getElementById('review-count').textContent = uniqueWrong.length;
     } else {
       reviewBtn.style.display = 'none';
+    }
+    const leaderboardWrap = document.getElementById('leaderboard-link-wrap');
+    if (currentQuizId) {
+      saveServerProgress(true);
+      document.getElementById('leaderboard-link').href = 'leaderboard.html?quizId=' + encodeURIComponent(currentQuizId);
+      leaderboardWrap.style.display = 'block';
+    } else {
+      leaderboardWrap.style.display = 'none';
     }
     clearProgress();
   } else {

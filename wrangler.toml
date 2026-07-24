@@ -1,0 +1,10 @@
+name = "json-quiz"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "."
+
+# Cloudflare Pagesのダッシュボードでプロジェクトを作成しGitリポジトリに接続している場合、
+# KVバインディングと環境変数は基本的にダッシュボード側 (Settings > Functions) の設定が使われます。
+# このファイルは `wrangler pages dev` によるローカル開発用です。
+[[kv_namespaces]]
+binding = "QUIZ_KV"
+id = "local-placeholder-id"

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>クイズ管理画面</title>
+<style>
+  :root {
+    --bg: #f5f5f2;
+    --card: #ffffff;
+    --border: #ddd;
+    --accent: #4a7c59;
+    --accent-dark: #33573d;
+    --danger: #b5433e;
+    --text: #222;
+    --muted: #777;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 24px 16px 60px;
+    display: flex;
+    justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 720px; }
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  h2 { font-size: 16px; margin: 28px 0 10px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input[type="text"], input[type="password"], textarea {
+    width: 100%;
+    font-size: 14px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    margin-bottom: 10px;
+  }
+  textarea { font-family: monospace; font-size: 13px; height: 160px; resize: vertical; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font-size: 14px;
+    padding: 9px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent-dark); }
+  button.primary:hover { background: var(--accent-dark); }
+  button.danger { color: var(--danger); border-color: var(--danger); }
+  .quiz-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .quiz-item:last-child { border-bottom: none; }
+  .quiz-item .title { font-size: 14px; }
+  .quiz-item .meta { font-size: 12px; color: var(--muted); }
+  #error, #login-error { color: var(--danger); font-size: 13px; margin-top: 6px; white-space: pre-wrap; }
+  #status-msg { color: var(--accent-dark); font-size: 13px; margin-top: 6px; }
+  #login-screen { max-width: 360px; margin: 60px auto 0; }
+  a.back-link { font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="login-screen">
+    <h1>クイズ管理画面</h1>
+    <div class="card">
+      <label for="password-input">管理者パスワード</label>
+      <input type="password" id="password-input" placeholder="パスワード">
+      <button class="primary" id="login-btn">ログイン</button>
+      <div id="login-error"></div>
+    </div>
+    <p style="font-size:13px;"><a class="back-link" href="index.html">← クイズアプリに戻る</a></p>
+  </div>
+
+  <div id="admin-screen" style="display:none;">
+    <h1>クイズ管理画面</h1>
+    <p style="font-size:13px;"><a class="back-link" href="index.html">← クイズアプリに戻る</a></p>
+
+    <h2>登録済みクイズセット</h2>
+    <div class="card" id="quiz-list-card">
+      <div id="quiz-list"></div>
+      <div id="quiz-list-empty" style="font-size:13px; color:var(--muted);">まだクイズセットがありません。</div>
+    </div>
+
+    <h2 id="form-title">新しいクイズセットを追加</h2>
+    <div class="card">
+      <label for="title-input">タイトル</label>
+      <input type="text" id="title-input" placeholder="例: 地理クイズ">
+      <label for="questions-input">問題（JSON配列: question と answer を持つオブジェクト）</label>
+      <textarea id="questions-input">[
+  { "question": "日本の首都は？", "answer": "東京" },
+  { "question": "富士山がある都道府県は？（2つのうち1つ）", "answer": "静岡県・山梨県" }
+]</textarea>
+      <div class="row">
+        <button class="primary" id="save-btn">追加する</button>
+        <button id="cancel-edit-btn" style="display:none;">編集をキャンセル</button>
+      </div>
+      <div id="error"></div>
+      <div id="status-msg"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let adminPassword = '';
+let editingId = null;
+
+const loginScreen = document.getElementById('login-screen');
+const adminScreen = document.getElementById('admin-screen');
+const errorBox = document.getElementById('error');
+const statusMsg = document.getElementById('status-msg');
+
+function authHeaders() {
+  return { 'content-type': 'application/json', 'X-Admin-Password': adminPassword };
+}
+
+document.getElementById('login-btn').addEventListener('click', login);
+document.getElementById('password-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); login(); }
+});
+
+async function login() {
+  const pw = document.getElementById('password-input').value;
+  const loginError = document.getElementById('login-error');
+  loginError.textContent = '';
+  if (!pw) {
+    loginError.textContent = 'パスワードを入力してください。';
+    return;
+  }
+  // パスワードの正誤は追加/編集/削除リクエスト時に401で判明する（一覧取得自体は認証不要）
+  adminPassword = pw;
+  try {
+    sessionStorage.setItem('quizAdminPassword', pw);
+  } catch (e) {
+    // sessionStorageが使えなくても致命的ではない
+  }
+  loginScreen.style.display = 'none';
+  adminScreen.style.display = 'block';
+  await loadQuizList();
+}
+
+async function loadQuizList() {
+  const listEl = document.getElementById('quiz-list');
+  const emptyEl = document.getElementById('quiz-list-empty');
+  listEl.innerHTML = '';
+  try {
+    const res = await fetch('/api/quizzes');
+    const list = await res.json();
+    if (!Array.isArray(list) || list.length === 0) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+    list.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'quiz-item';
+      row.innerHTML =
+        '<div><div class="title">' + escapeHtml(entry.title) + '</div>' +
+        '<div class="meta">ID: ' + escapeHtml(entry.id) + ' ／ ' + entry.count + '問 ／ 更新: ' + escapeHtml(entry.updatedAt || '') + '</div></div>';
+      const btnWrap = document.createElement('div');
+      btnWrap.className = 'row';
+      const editBtn = document.createElement('button');
+      editBtn.textContent = '編集';
+      editBtn.addEventListener('click', () => loadForEdit(entry.id));
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'danger';
+      deleteBtn.textContent = '削除';
+      deleteBtn.addEventListener('click', () => deleteQuiz(entry.id, entry.title));
+      btnWrap.appendChild(editBtn);
+      btnWrap.appendChild(deleteBtn);
+      row.appendChild(btnWrap);
+      listEl.appendChild(row);
+    });
+  } catch (e) {
+    errorBox.textContent = '一覧の取得に失敗しました:\n' + e.message;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function loadForEdit(id) {
+  errorBox.textContent = '';
+  statusMsg.textContent = '';
+  try {
+    const res = await fetch('/api/quiz/' + encodeURIComponent(id));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    editingId = id;
+    document.getElementById('title-input').value = data.title;
+    document.getElementById('questions-input').value = JSON.stringify(data.questions, null, 2);
+    document.getElementById('form-title').textContent = '「' + data.title + '」を編集';
+    document.getElementById('save-btn').textContent = '更新する';
+    document.getElementById('cancel-edit-btn').style.display = 'inline-block';
+    window.scrollTo({ top: document.getElementById('form-title').offsetTop - 20, behavior: 'smooth' });
+  } catch (e) {
+    errorBox.textContent = '読み込みに失敗しました:\n' + e.message;
+  }
+}
+
+document.getElementById('cancel-edit-btn').addEventListener('click', resetForm);
+
+function resetForm() {
+  editingId = null;
+  document.getElementById('title-input').value = '';
+  document.getElementById('questions-input').value = '[\n  { "question": "", "answer": "" }\n]';
+  document.getElementById('form-title').textContent = '新しいクイズセットを追加';
+  document.getElementById('save-btn').textContent = '追加する';
+  document.getElementById('cancel-edit-btn').style.display = 'none';
+  errorBox.textContent = '';
+  statusMsg.textContent = '';
+}
+
+async function deleteQuiz(id, title) {
+  if (!confirm('「' + title + '」を削除します。よろしいですか？（元に戻せません）')) return;
+  try {
+    const res = await fetch('/api/quiz/' + encodeURIComponent(id), {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    if (res.status === 401) {
+      alert('パスワードが違うため削除できませんでした。');
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (editingId === id) resetForm();
+    await loadQuizList();
+  } catch (e) {
+    errorBox.textContent = '削除に失敗しました:\n' + e.message;
+  }
+}
+
+document.getElementById('save-btn').addEventListener('click', async () => {
+  errorBox.textContent = '';
+  statusMsg.textContent = '';
+  const title = document.getElementById('title-input').value.trim();
+  const rawQuestions = document.getElementById('questions-input').value;
+
+  if (!title) {
+    errorBox.textContent = 'タイトルを入力してください。';
+    return;
+  }
+  let questions;
+  try {
+    questions = JSON.parse(rawQuestions);
+  } catch (e) {
+    errorBox.textContent = 'JSONの形式が正しくありません:\n' + e.message;
+    return;
+  }
+  if (!Array.isArray(questions) || questions.length === 0) {
+    errorBox.textContent = '問題は question と answer を持つオブジェクトの配列にしてください。';
+    return;
+  }
+  for (const q of questions) {
+    if (typeof q.question !== 'string' || typeof q.answer !== 'string') {
+      errorBox.textContent = '各要素に question と answer（文字列）が必要です。';
+      return;
+    }
+  }
+
+  try {
+    const url = editingId ? '/api/quiz/' + encodeURIComponent(editingId) : '/api/quiz';
+    const method = editingId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: authHeaders(),
+      body: JSON.stringify({ title, questions }),
+    });
+    if (res.status === 401) {
+      errorBox.textContent = 'パスワードが違います。ログインし直してください。';
+      return;
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || ('HTTP ' + res.status));
+    }
+    const message = editingId ? '更新しました。' : '追加しました。';
+    resetForm();
+    statusMsg.textContent = message;
+    await loadQuizList();
+  } catch (e) {
+    errorBox.textContent = '保存に失敗しました:\n' + e.message;
+  }
+});
+
+// 同じタブ内でのリロード時は簡易的にパスワードを引き継ぐ（保存はsessionStorageのみ、送信は毎回ヘッダー経由）
+try {
+  const saved = sessionStorage.getItem('quizAdminPassword');
+  if (saved) {
+    document.getElementById('password-input').value = saved;
+  }
+} catch (e) {
+  // no-op
+}
+</script>
+</body>
+</html>
