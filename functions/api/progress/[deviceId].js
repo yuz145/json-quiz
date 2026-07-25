@@ -16,6 +16,7 @@ function rowToRecord(row) {
     idx: row.idx,
     order: JSON.parse(row.order_json),
     correct: row.correct,
+    bestCorrect: row.best_correct,
     wrong: row.wrong,
     wrongIndices: JSON.parse(row.wrong_indices_json),
     mode: row.mode,
@@ -74,9 +75,9 @@ export const onRequestPost = safe(async ({ params, request, env }) => {
   const shuffleOn = body.shuffleOn ? 1 : 0;
   const completed = body.completed ? 1 : 0;
 
-  await env.DB.prepare(
-    `INSERT INTO progress (quiz_id, device_id, ip, country, region, city, idx, order_json, correct, wrong, wrong_indices_json, mode, answer_mode, shuffle_on, completed, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  const upserted = await env.DB.prepare(
+    `INSERT INTO progress (quiz_id, device_id, ip, country, region, city, idx, order_json, correct, best_correct, wrong, wrong_indices_json, mode, answer_mode, shuffle_on, completed, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(quiz_id, device_id) DO UPDATE SET
        ip = excluded.ip,
        country = excluded.country,
@@ -85,23 +86,27 @@ export const onRequestPost = safe(async ({ params, request, env }) => {
        idx = excluded.idx,
        order_json = excluded.order_json,
        correct = excluded.correct,
+       best_correct = MAX(progress.best_correct, excluded.correct),
        wrong = excluded.wrong,
        wrong_indices_json = excluded.wrong_indices_json,
        mode = excluded.mode,
        answer_mode = excluded.answer_mode,
        shuffle_on = excluded.shuffle_on,
        completed = excluded.completed,
-       updated_at = excluded.updated_at`
+       updated_at = excluded.updated_at
+     RETURNING best_correct`
   ).bind(
-    quizId, deviceId, ip, country, region, city, idx, JSON.stringify(order), correct, wrong,
+    quizId, deviceId, ip, country, region, city, idx, JSON.stringify(order), correct, correct, wrong,
     JSON.stringify(wrongIndices), mode, answerMode, shuffleOn, completed, now
-  ).run();
+  ).first();
+
+  const bestCorrect = upserted ? upserted.best_correct : correct;
 
   // 1週間以上更新のない他の進捗行をついでに掃除する（KVのTTLの代替）
   await cleanupOldProgress(env);
 
   return json({
-    deviceId, quizId, ip, idx, order, correct, wrong, wrongIndices,
+    deviceId, quizId, ip, idx, order, correct, bestCorrect, wrong, wrongIndices,
     mode, answerMode,
     shuffleOn: !!shuffleOn,
     completed: !!completed,

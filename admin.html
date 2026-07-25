@@ -605,9 +605,10 @@ function renderIpGroupedLogs(container) {
         ? '<span class="badge-complete">完走</span>'
         : '<span class="badge-ongoing">解答中 (' + (log.idx + 1) + '/' + log.totalCount + '問)</span>';
 
-      const scoreStr = log.completed
+      const bestStr = ' ／ ベスト ' + (log.bestCorrect || 0) + '/' + log.totalCount + '問';
+      const scoreStr = (log.completed
         ? log.correct + ' / ' + log.totalCount + ' 正解 (' + Math.round((log.correct / (log.totalCount || 1)) * 100) + '%)'
-        : (log.correct + '正解 / ' + log.wrong + '不正解');
+        : (log.correct + '正解 / ' + log.wrong + '不正解')) + bestStr;
 
       tr.innerHTML =
         '<td>' + escapeHtml(dateStr) + '</td>' +
@@ -649,9 +650,10 @@ function renderAllLogsTable(container) {
       ? '<span class="badge-complete">完走</span>'
       : '<span class="badge-ongoing">解答中 (' + (log.idx + 1) + '/' + log.totalCount + '問)</span>';
 
-    const scoreStr = log.completed
+    const bestStr = ' ／ ベスト ' + (log.bestCorrect || 0) + '/' + log.totalCount + '問';
+    const scoreStr = (log.completed
       ? log.correct + ' / ' + log.totalCount + ' 正解 (' + Math.round((log.correct / (log.totalCount || 1)) * 100) + '%)'
-      : (log.correct + '正解 / ' + log.wrong + '不正解');
+      : (log.correct + '正解 / ' + log.wrong + '不正解')) + bestStr;
 
     const nickname = ipNicknames[log.ip];
     const nicknameHtml = nickname ? '<br><span style="font-size:11px; color:var(--accent-dark); font-weight:700;">' + escapeHtml(nickname) + '</span>' : '';

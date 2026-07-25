@@ -16,6 +16,7 @@ export const onRequestGet = safe(async ({ request, env }) => {
       json_array_length(p.order_json) AS orderLength,
       json_array_length(q.questions) AS totalCount,
       p.correct AS correct,
+      p.best_correct AS bestCorrect,
       p.wrong AS wrong,
       p.completed AS completed,
       p.updated_at AS updatedAt

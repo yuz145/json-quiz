@@ -1,4 +1,10 @@
 -- Cloudflare D1 schema for the quiz app (replaces the QUIZ_KV data model)
+--
+-- 注意: このファイルは CREATE TABLE IF NOT EXISTS ベースのため、既に本番D1に
+-- 存在するテーブルへ後から列を追加しても自動反映されません。列を追加した場合は
+-- 本番へ `wrangler d1 execute <DB名> --remote --command="ALTER TABLE ... ADD COLUMN ..."`
+-- を個別に実行してください（例: best_correct列の追加時は下記を実行）。
+--   ALTER TABLE progress ADD COLUMN best_correct INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS quizzes (
   id TEXT PRIMARY KEY,
@@ -20,7 +26,8 @@ CREATE TABLE IF NOT EXISTS progress (
   city TEXT,     -- Cloudflare request.cf.city（取得できない場合はNULL）
   idx INTEGER NOT NULL DEFAULT 0,
   order_json TEXT NOT NULL DEFAULT '[]',          -- JSON配列文字列（回答順のインデックス）
-  correct INTEGER NOT NULL DEFAULT 0,
+  correct INTEGER NOT NULL DEFAULT 0,  -- 直近の解答結果（このクイズ・デバイスの最新の正解数）
+  best_correct INTEGER NOT NULL DEFAULT 0,  -- これまでの最高正解数。保存のたびに MAX(既存, 今回のcorrect) で更新（下がることはない）
   wrong INTEGER NOT NULL DEFAULT 0,
   wrong_indices_json TEXT NOT NULL DEFAULT '[]',  -- JSON配列文字列
   mode TEXT NOT NULL DEFAULT 'normal',            -- 'normal' | 'review'

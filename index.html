@@ -520,6 +520,7 @@ function getOrCreateDeviceId() {
 const deviceId = getOrCreateDeviceId();
 
 function saveProgress() {
+  // サーバーへの同期とは切り離し、ローカルの「続きから再開する」用にはこれまで通り毎回保存する
   const data = {
     quiz, order, idx, correct, wrong, shuffleOn, wrongIndices, mode, answerMode,
     currentQuizId,
@@ -530,25 +531,59 @@ function saveProgress() {
   } catch (e) {
     // localStorageが使えない環境（容量超過等）では黙って諦める
   }
-  if (currentQuizId) {
-    saveServerProgress(false);
-  }
+}
+
+// サーバー同期はKV/D1書き込みを減らすため「3問ごと＋離脱時＋クイズ終了時」のハイブリッドにする
+let pendingSyncCount = 0;
+
+function buildProgressPayload(completed) {
+  return {
+    quizId: currentQuizId, idx, order, correct, wrong, wrongIndices,
+    mode, answerMode, shuffleOn, completed: !!completed
+  };
 }
 
 async function saveServerProgress(completed) {
+  if (!currentQuizId) return;
+  pendingSyncCount = 0;
   try {
     await fetch('/api/progress/' + encodeURIComponent(deviceId), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        quizId: currentQuizId, idx, order, correct, wrong, wrongIndices,
-        mode, answerMode, shuffleOn, completed: !!completed
-      })
+      body: JSON.stringify(buildProgressPayload(completed))
     });
   } catch (e) {
     // オフライン等で保存に失敗しても、ローカルの進行は止めない
   }
 }
+
+// 1問解答するたびに呼ぶ。3問溜まった時だけサーバーへ送信し、それ未満はメモリ内に留める
+function maybeSyncAfterAnswer() {
+  if (!currentQuizId) return;
+  pendingSyncCount++;
+  if (pendingSyncCount >= 3) {
+    saveServerProgress(false);
+  }
+}
+
+// ページを離れる（タブを閉じる/切り替える等）瞬間に、3問未満で溜まっている進捗を
+// navigator.sendBeacon() で確実に送信する。fetchと違い、ページ遷移中でも送信が完了しやすい。
+function sendProgressBeacon() {
+  if (!currentQuizId || pendingSyncCount === 0) return;
+  try {
+    const payload = JSON.stringify(buildProgressPayload(false));
+    const blob = new Blob([payload], { type: 'application/json' });
+    const sent = navigator.sendBeacon('/api/progress/' + encodeURIComponent(deviceId), blob);
+    if (sent) pendingSyncCount = 0;
+  } catch (e) {
+    // sendBeaconが使えない環境では諦める（次に開いた時にまた3問ごとの同期でカバーされる）
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') sendProgressBeacon();
+});
+window.addEventListener('pagehide', sendProgressBeacon);
 
 function clearProgress() {
   localStorage.removeItem(STORAGE_KEY);
@@ -586,6 +621,7 @@ function checkResume() {
     mode = data.mode || 'normal';
     answerMode = data.answerMode || 'self';
     currentQuizId = data.currentQuizId || null;
+    pendingSyncCount = 0;
     updateShuffleToggle();
     updateAnswerModeToggle();
     updateAutoCorrectToggle();
@@ -603,45 +639,15 @@ function checkResume() {
 
 checkResume();
 
-const STATS_KEY = 'quizAppStats_v1';
-
-function loadQuizStats() {
-  try {
-    const raw = localStorage.getItem(STATS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function recordQuizResult(quizId, title, correctCount, totalCount) {
-  if (!quizId) return;
-  const stats = loadQuizStats();
-  const prev = stats[quizId] || { bestScore: 0, total: totalCount };
-  const bestScore = Math.max(prev.bestScore || 0, correctCount);
-  stats[quizId] = {
-    title: title || prev.title || quizId,
-    total: totalCount,
-    bestScore: bestScore,
-    lastScore: correctCount,
-    completed: true,
-    updatedAt: Date.now()
-  };
-  try {
-    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
-  } catch (e) {}
-}
-
 async function loadQuizSetList() {
   try {
-    const res = await fetch('/api/quizzes');
+    const res = await fetch('/api/quizzes?deviceId=' + encodeURIComponent(deviceId));
     if (!res.ok) return;
     const list = await res.json();
     if (!Array.isArray(list) || list.length === 0) return;
     const container = document.getElementById('quiz-sets-list');
     container.innerHTML = '';
 
-    const stats = loadQuizStats();
     let totalQuestionsSum = 0;
     let totalBestCorrectSum = 0;
     let attemptedCount = 0;
@@ -665,18 +671,17 @@ async function loadQuizSetList() {
       entries.forEach(entry => {
         const btn = document.createElement('button');
         const count = entry.count || 0;
-        const st = stats[entry.id];
 
         let badgeText = '';
-        if (st && st.total) {
-          const best = st.bestScore || 0;
-          const rate = Math.round((best / st.total) * 100);
-          if (best === st.total) {
+        if (entry.attempted && count) {
+          const best = entry.bestCorrect || 0;
+          const rate = Math.round((best / count) * 100);
+          if (best === count) {
             badgeText = '🎉 満点 (100%)';
           } else {
-            badgeText = '達成度 ' + best + '/' + st.total + '問 (' + rate + '%)';
+            badgeText = '達成度 ' + best + '/' + count + '問 (' + rate + '%)';
           }
-          totalQuestionsSum += st.total;
+          totalQuestionsSum += count;
           totalBestCorrectSum += best;
           attemptedCount++;
         } else {
@@ -770,6 +775,7 @@ function startQuizFromArray(data) {
   wrongIndices = [];
   answerHistory = [];
   mode = 'normal';
+  pendingSyncCount = 0;
   setupScreen.style.display = 'none';
   resultScreen.style.display = 'none';
   quizScreen.style.display = 'block';
@@ -924,6 +930,7 @@ function finishJudge() {
   document.getElementById('wrong-count').textContent = wrong;
   document.getElementById('next-btn').disabled = false;
   saveProgress();
+  maybeSyncAfterAnswer();
 }
 
 document.getElementById('next-btn').addEventListener('click', () => {
@@ -945,9 +952,6 @@ document.getElementById('next-btn').addEventListener('click', () => {
     }
     if (currentQuizId) {
       saveServerProgress(true);
-      if (mode === 'normal') {
-        recordQuizResult(currentQuizId, '', correct, order.length);
-      }
     }
     renderAnswerReview();
     clearProgress();
@@ -965,6 +969,7 @@ document.getElementById('review-btn').addEventListener('click', () => {
   wrongIndices = [];
   answerHistory = [];
   mode = 'review';
+  pendingSyncCount = 0;
   resultScreen.style.display = 'none';
   quizScreen.style.display = 'block';
   renderQuestion();
@@ -1020,6 +1025,7 @@ document.getElementById('restart-btn').addEventListener('click', () => {
   wrongIndices = [];
   answerHistory = [];
   mode = 'normal';
+  pendingSyncCount = 0;
   order = quiz.map((_, i) => i);
   if (shuffleOn) {
     for (let i = order.length - 1; i > 0; i--) {

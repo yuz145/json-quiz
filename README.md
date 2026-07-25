@@ -5,7 +5,7 @@
 ## 主な機能
 
 - クイズセットをCloudflare D1データベースに保存し、トップページでカテゴリ（教科）ごとにグループ化された一覧から選んで開始（`/api/quizzes`, `/api/quiz/:id`）
-- クイズセットごとの最高達成度（正解数・満点達成バッジ）および全クイズセットを合わせた「全体の達成度」プログレスカードを自動記録・表示
+- クイズセットごとの最高達成度（正解数・満点達成バッジ）および全クイズセットを合わせた「全体の達成度」プログレスカードを自動記録・表示。最高正解数はD1側（`progress.best_correct`）で保持されるため、後から低いスコアで再挑戦しても過去のベスト記録は上書きされません
 - 「続きから再開する」ボタンを押した場合のみ途中から再開し、クイズセット一覧からの開始は常にフレッシュな「最初から」スタート
 - 名前の入力は不要。初回アクセス時にブラウザの`localStorage`へランダムなデバイスIDを自動生成して保存し、以後はそれをキーに進捗をD1に保存
 - パスワード保護された管理画面 `/admin.html` からクイズセット（question/answerの配列＋カテゴリ）を追加・編集・削除
@@ -18,6 +18,7 @@
 - クイズの実行中いつでも「問題一覧を見る」から全問題（question/answer）を確認可能。答えはタップするまで非表示（ネタバレ防止）
 - スマートフォン表示の全画面レスポンシブ最適化（適切なタップエリア、フォームズーム防止、iPhoneのDynamic Island/ノッチ対応など）
 - 間違えた問題だけをもう一度出題する「復習モード」
+- サーバーへの進捗保存は「3問解答するごと」「タブを閉じる/切り替えるなどページを離れる瞬間（`navigator.sendBeacon`）」「クイズ終了時」のハイブリッド方式。毎問ごとの書き込みを避けつつ、途中離脱時も直近の状態を取りこぼさない
 
 ## 使い方
 
@@ -54,7 +55,7 @@ migrate-kv-to-d1.js  旧KV実装からD1へのデータ移行スクリプト（�
 functions/
   _utils.js         認証チェック・共通レスポンス生成・進捗クリーンアップなど共通処理（URLルーティングの対象外）
   api/
-    quizzes.js              GET  /api/quizzes            クイズセット一覧
+    quizzes.js              GET  /api/quizzes            クイズセット一覧（?deviceId=xxx を付けるとそのデバイスのbestCorrect/attemptedも返す）
     quiz/index.js            POST /api/quiz                クイズセット追加（管理者のみ。title/category/questions）
     quiz/[id].js              GET  /api/quiz/:id            クイズセット1件取得
                               PUT  /api/quiz/:id            クイズセット更新（管理者のみ）
@@ -78,7 +79,7 @@ functions/
 | テーブル | 内容 |
 | --- | --- |
 | `quizzes` | クイズセット本体。`id`（主キー）, `title`, `category`, `questions`（JSON文字列）, `created_at`, `updated_at` |
-| `progress` | デバイスごとの進捗。`(quiz_id, device_id)` の複合主キー。`ip`, `country`, `region`, `city`, `idx`, `order_json`, `correct`, `wrong`, `wrong_indices_json`, `mode`, `answer_mode`, `shuffle_on`, `completed`, `updated_at` |
+| `progress` | デバイスごとの進捗。`(quiz_id, device_id)` の複合主キー。`ip`, `country`, `region`, `city`, `idx`, `order_json`, `correct`, `best_correct`, `wrong`, `wrong_indices_json`, `mode`, `answer_mode`, `shuffle_on`, `completed`, `updated_at` |
 | `ip_nicknames` | IPアドレスに管理者が付けたニックネーム。`ip`（主キー）, `nickname`, `updated_at` |
 
 - `category` を省略してクイズセットを作成・更新した場合は `未分類` として扱われます
@@ -86,6 +87,7 @@ functions/
 - クイズセットを削除すると、そのクイズに紐づく `progress` 行も併せて削除されます（DBのFOREIGN KEY制約に頼らず、削除処理内で明示的に行っています）
 - KVの `expirationTtl` に相当する仕組みがD1には無いため、`POST /api/progress/:deviceId` が呼ばれるたびに「1週間以上 `updated_at` が更新されていない `progress` 行」を削除する簡易的なクリーンアップを実行しています（`functions/_utils.js` の `cleanupOldProgress`）。アクセスが全く無いクイズの古い進捗はこの方式では削除されませんが、実用上は許容範囲としています
 - `country` / `region` / `city` はCloudflareエッジが自動的に付与する `request.cf` から取得したもので、外部APIへの問い合わせは発生しません（ローカル開発の `wrangler pages dev` でも疑似的な値が入ります）。これらの列と `ip_nicknames` テーブルの内容は管理者専用API（`/api/nicknames`, `/api/admin/*`）でのみ取得可能で、`/api/progress/:deviceId` や `/api/quiz*` など一般ユーザー向けのレスポンスには含まれません
+- `correct` は「直近の解答結果」、`best_correct` は「これまでの最高正解数」。`POST /api/progress/:deviceId` を呼ぶたびに `best_correct = MAX(既存のbest_correct, 今回のcorrect)` で更新されるため、後から低いスコアで再挑戦しても下がりません
 - `schema.sql` は `CREATE TABLE IF NOT EXISTS` ベースなので、新規にテーブル列を追加した場合、**既存の本番D1には自動反映されません**。列追加のたびに `wrangler d1 execute <DB名> --remote --command="ALTER TABLE ... ADD COLUMN ..."` を手動で実行してから新しいコードをデプロイしてください（実行を忘れると該当列を使うAPIが失敗します）
 
 ## ローカルでの動作確認
