@@ -409,7 +409,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-5';
+const APP_VERSION = '2026-07-25-6';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -441,6 +441,8 @@ let shuffleOn = true;
 let wrongIndices = [];
 let answerHistory = []; // 今回の周回で解答した順の記録: {question, correctAnswer, userAnswer, isCorrect}
 let lastTypedAnswer = null; // 直近に「回答する」した入力文字列（自己採点モードではnullのまま）
+let awaitingJudgeConfirmation = false; // 「正解した/不正解だった」の確定待ちかどうか。
+                                        // 入力欄のフォーカス状態やdisplayの一時的なタイミングに依存させないための専用フラグ
 let mode = 'normal'; // 'normal' | 'review'
 let answerMode = 'type'; // 'self' | 'type'
 let autoCorrectOnMatch = true; // 「文字入力」モードで完全一致した場合に自動で正解にするか
@@ -796,6 +798,7 @@ function startQuizFromArray(data) {
 }
 
 function renderQuestion() {
+  awaitingJudgeConfirmation = false;
   const item = quiz[order[idx]];
   document.getElementById('q-text').textContent = item.question;
   document.getElementById('a-text').textContent = item.answer;
@@ -827,6 +830,7 @@ document.getElementById('reveal-btn').addEventListener('click', () => {
   document.getElementById('a-block').style.display = 'block';
   document.getElementById('judge-row').style.display = 'flex';
   document.getElementById('reveal-btn').style.display = 'none';
+  awaitingJudgeConfirmation = true;
 });
 
 function submitTypedAnswer() {
@@ -857,12 +861,18 @@ function submitTypedAnswer() {
   } else {
     badge.textContent = isMatch ? '✓ 一致（自動判定）' : '✗ 不一致（自動判定）';
     document.getElementById('judge-row').style.display = 'flex';
+    awaitingJudgeConfirmation = true;
   }
 }
 
 document.getElementById('submit-answer-btn').addEventListener('click', submitTypedAnswer);
 document.getElementById('type-answer-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
+    if (awaitingJudgeConfirmation) {
+      // 既に送信済みで結果確定待ちの場合、万一入力欄にフォーカスが残っていても
+      // ここでは何もせず、documentのグローバルハンドラに確定処理を委ねる
+      return;
+    }
     e.preventDefault();
     e.stopPropagation(); // このEnterで送信した直後に、documentのキー操作ハンドラが同じ押下を
                           // 「確定待ち状態でのEnter」として二重に処理してしまうのを防ぐ
@@ -939,6 +949,7 @@ function renderAnswerReview() {
   });
 }
 function finishJudge() {
+  awaitingJudgeConfirmation = false;
   document.getElementById('judge-row').style.display = 'none';
   document.getElementById('correct-count').textContent = correct;
   document.getElementById('wrong-count').textContent = wrong;
@@ -984,6 +995,31 @@ document.addEventListener('keydown', (e) => {
   const isRelevantKey = key === 'Enter' || key === ' ' || key === 'Spacebar' || lowerKey === 'f' || lowerKey === 'j';
   if (!isRelevantKey) return;
 
+  // 結果確定待ちの状態は、入力欄にフォーカスが残っているかどうかに関わらず必ずここで処理する。
+  // （blur()やdisplay:noneのタイミングに依存すると、ブラウザによっては入力欄が実質フォーカスを
+  // 保持したままになり、Enter/Spaceが入力欄に食われて反応しなくなることがあるため）
+  if (awaitingJudgeConfirmation) {
+    e.preventDefault();
+    const badge = document.getElementById('auto-hint-badge');
+    const hasAutoJudgment = badge.style.display === 'block'
+      && (badge.classList.contains('match') || badge.classList.contains('mismatch'));
+
+    let markCorrect;
+    if (key === 'Enter' && hasAutoJudgment) {
+      // 完全一致チェックの自動判定バッジが出ている場合、Enterはその結果をそのまま確定する
+      markCorrect = badge.classList.contains('match');
+    } else if (key === 'Enter' || lowerKey === 'f') {
+      markCorrect = true;
+    } else {
+      // Space または j （自動判定を手動で上書きする場合も含む）
+      markCorrect = false;
+    }
+
+    document.getElementById(markCorrect ? 'mark-correct' : 'mark-wrong').click();
+    document.getElementById('next-btn').click();
+    return;
+  }
+
   const typeAnswerRow = document.getElementById('type-answer-row');
   if (typeAnswerRow.style.display !== 'none') {
     // 文字入力モードでまだ回答を送信していない間は、入力欄自身のkeydown処理に任せる
@@ -994,31 +1030,8 @@ document.addEventListener('keydown', (e) => {
   // ここから先はSpaceキーによるページスクロールなど、ブラウザ標準の挙動を止める
   e.preventDefault();
 
-  const judgeRow = document.getElementById('judge-row');
   const revealRow = document.getElementById('reveal-row');
   const nextBtn = document.getElementById('next-btn');
-  const badge = document.getElementById('auto-hint-badge');
-
-  if (judgeRow.style.display === 'flex') {
-    // 完全一致チェックの自動判定バッジが出ている（文字入力モードで送信済み）場合、
-    // Enterは「自動判定の結果をそのまま確定」する。F/JまたはSpaceはいつでも手動で上書きできる。
-    const hasAutoJudgment = badge.style.display === 'block'
-      && (badge.classList.contains('match') || badge.classList.contains('mismatch'));
-
-    let markCorrect;
-    if (key === 'Enter' && hasAutoJudgment) {
-      markCorrect = badge.classList.contains('match');
-    } else if (key === 'Enter' || lowerKey === 'f') {
-      markCorrect = true;
-    } else {
-      // Space または j
-      markCorrect = false;
-    }
-
-    document.getElementById(markCorrect ? 'mark-correct' : 'mark-wrong').click();
-    nextBtn.click();
-    return;
-  }
 
   if (revealRow.style.display === 'flex' && key === 'Enter') {
     // 自己採点モードでまだ答えを表示していない: Enterで答えを表示する
