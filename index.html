@@ -262,6 +262,7 @@
   .btn-correct:hover { background: var(--accent); color: #fff; }
   .btn-wrong { background: #ffebee; border-color: var(--danger); color: var(--danger); }
   .btn-wrong:hover { background: var(--danger); color: #fff; }
+  .key-hint { display: inline-block; margin-left: 6px; padding: 1px 6px; font-size: 11px; font-weight: normal; border-radius: 4px; background: rgba(0,0,0,0.12); color: inherit; opacity: 0.75; vertical-align: middle; }
   .btn-subtle {
     font-size: 13px;
     font-weight: 500;
@@ -361,7 +362,7 @@
       </div>
     </div>
     <div class="row" style="margin-top:10px;" id="reveal-row">
-      <button class="primary full-width" id="reveal-btn">答えを表示</button>
+      <button class="primary full-width" id="reveal-btn">答えを表示<span class="key-hint">Enter</span></button>
     </div>
     <div style="margin-top:10px; display:none;" id="type-answer-row">
       <input type="text" id="type-answer-input" placeholder="答えを入力してEnterまたは「回答する」">
@@ -369,8 +370,8 @@
     </div>
     <div id="auto-hint-badge" style="display:none;"></div>
     <div class="judge-row" id="judge-row" style="display:none;">
-      <button class="btn-correct" id="mark-correct">正解した</button>
-      <button class="btn-wrong" id="mark-wrong">不正解だった</button>
+      <button class="btn-correct" id="mark-correct">正解した<span class="key-hint">Enter / F</span></button>
+      <button class="btn-wrong" id="mark-wrong">不正解だった<span class="key-hint">Space / J</span></button>
     </div>
     <div class="nav-row">
       <button id="back-to-setup" class="btn-subtle">← 最初に戻る</button>
@@ -409,7 +410,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-6';
+const APP_VERSION = '2026-07-25-7';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
