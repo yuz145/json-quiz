@@ -381,6 +381,7 @@
       <button class="primary full-width" id="submit-answer-btn">回答する</button>
     </div>
     <div id="auto-hint-badge" style="display:none;"></div>
+    <button id="override-correct-btn" class="btn-subtle" style="display:none; font-size:13px; padding:6px 10px; min-height:32px; margin-top:8px;">正解として記録する</button>
     <div class="judge-row" id="judge-row" style="display:none;">
       <button class="btn-wrong" id="mark-wrong">不正解だった<span class="key-hint" id="mark-wrong-key-hint">Space / F</span></button>
       <button class="btn-correct" id="mark-correct">正解した<span class="key-hint" id="mark-correct-key-hint">Enter / J</span></button>
@@ -422,7 +423,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-11';
+const APP_VERSION = '2026-07-25-12';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -817,6 +818,7 @@ function renderQuestion() {
   document.getElementById('a-text').textContent = item.answer;
   document.getElementById('a-block').style.display = 'none';
   document.getElementById('judge-row').style.display = 'none';
+  document.getElementById('override-correct-btn').style.display = 'none';
   document.getElementById('user-answer-line').style.display = 'none';
   const badge = document.getElementById('auto-hint-badge');
   badge.style.display = 'none';
@@ -888,16 +890,31 @@ function submitTypedAnswer() {
     correct++;
     recordAnswerHistory(true);
     finishJudge();
-  } else {
-    badge.textContent = isMatch ? '✓ 一致（自動判定）' : '✗ 不一致（自動判定）';
+  } else if (isMatch) {
+    // 一致だが「完全一致で自動正解」がOFF: 従来通り正解した/不正解だったの2択で確定させる
+    badge.textContent = '✓ 一致（自動判定）';
     document.getElementById('judge-row').style.display = 'flex';
-    updateJudgeKeyHints(true, isMatch);
+    updateJudgeKeyHints(true, true);
     awaitingJudgeConfirmation = true;
+  } else {
+    // 不一致: 「不正解」を既定の結果として即座に確定し、例外的に正解へ上書きする
+    // ための小さいボタンだけを表示する（次の問題ボタンのEnterでそのまま不正解確定へ進む）
+    badge.textContent = '✗ 不一致（自動判定）';
+    document.getElementById('judge-row').style.display = 'none';
+    wrong++;
+    wrongIndices.push(order[idx]);
+    recordAnswerHistory(false);
+    document.getElementById('override-correct-btn').style.display = 'inline-block';
+    finishJudge();
   }
 }
 
 document.getElementById('submit-answer-btn').addEventListener('click', submitTypedAnswer);
 document.getElementById('type-answer-input').addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229) {
+    // IME変換中・変換確定のEnterはアプリの送信処理として扱わない
+    return;
+  }
   if (e.key === 'Enter') {
     if (awaitingJudgeConfirmation) {
       // 既に送信済みで結果確定待ちの場合、万一入力欄にフォーカスが残っていても
@@ -928,6 +945,21 @@ document.getElementById('mark-wrong').addEventListener('click', () => {
   wrongIndices.push(order[idx]);
   recordAnswerHistory(false);
   finishJudge();
+});
+document.getElementById('override-correct-btn').addEventListener('click', () => {
+  // 自動判定「不一致」で既に不正解として即時確定した分を、正解として上書きする
+  wrong--;
+  const pos = wrongIndices.lastIndexOf(order[idx]);
+  if (pos !== -1) wrongIndices.splice(pos, 1);
+  const lastHistory = answerHistory[answerHistory.length - 1];
+  if (lastHistory) lastHistory.isCorrect = true;
+  correct++;
+  document.getElementById('correct-count').textContent = correct;
+  document.getElementById('wrong-count').textContent = wrong;
+  document.getElementById('override-correct-btn').style.display = 'none';
+  saveProgress();
+  maybeSyncAfterAnswer();
+  document.getElementById('next-btn').click();
 });
 function recordAnswerHistory(isCorrect) {
   const item = quiz[order[idx]];
@@ -1022,6 +1054,10 @@ document.getElementById('next-btn').addEventListener('click', () => {
 // 状態（回答入力中／結果確定待ち／答え表示前／確定済みで次へ進める状態）ごとにキーの意味を切り替える。
 document.addEventListener('keydown', (e) => {
   if (quizScreen.style.display !== 'block') return;
+  if (e.isComposing || e.keyCode === 229) {
+    // IME変換中・変換確定のEnter/Spaceはアプリのキー操作として扱わない
+    return;
+  }
   const key = e.key;
   const lowerKey = key.length === 1 ? key.toLowerCase() : key;
   const isRelevantKey = key === 'Enter' || key === ' ' || key === 'Spacebar' || lowerKey === 'f' || lowerKey === 'j';
