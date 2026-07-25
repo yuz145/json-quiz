@@ -1,4 +1,4 @@
-import { json, isAdmin, generateId, quizKey, getQuizIndex, saveQuizIndex, validateQuestions, normalizeCategory, safe } from '../../_utils.js';
+import { json, isAdmin, generateId, validateQuestions, normalizeCategory, safe } from '../../_utils.js';
 
 export const onRequestPost = safe(async ({ request, env }) => {
   if (!isAdmin(request, env)) {
@@ -20,12 +20,10 @@ export const onRequestPost = safe(async ({ request, env }) => {
 
   const id = generateId();
   const now = new Date().toISOString();
-  const quiz = { id, title, category, questions, createdAt: now, updatedAt: now };
-  await env.QUIZ_KV.put(quizKey(id), JSON.stringify(quiz));
 
-  const list = await getQuizIndex(env);
-  list.push({ id, title, category, count: questions.length, updatedAt: now });
-  await saveQuizIndex(env, list);
+  await env.DB.prepare(
+    'INSERT INTO quizzes (id, title, category, questions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(id, title, category, JSON.stringify(questions), now, now).run();
 
-  return json(quiz, 201);
+  return json({ id, title, category, questions, createdAt: now, updatedAt: now }, 201);
 });

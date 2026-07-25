@@ -1,18 +1,26 @@
-import { json, isAdmin, quizKey, getQuizIndex, saveQuizIndex, validateQuestions, normalizeCategory, safe } from '../../_utils.js';
+import { json, isAdmin, validateQuestions, normalizeCategory, safe } from '../../_utils.js';
 
 export const onRequestGet = safe(async ({ params, env }) => {
-  const raw = await env.QUIZ_KV.get(quizKey(params.id));
-  if (!raw) return json({ error: 'not found' }, 404);
-  const data = JSON.parse(raw);
-  return json({ ...data, category: normalizeCategory(data.category) });
+  const row = await env.DB.prepare(
+    'SELECT id, title, category, questions, created_at AS createdAt, updated_at AS updatedAt FROM quizzes WHERE id = ?'
+  ).bind(params.id).first();
+  if (!row) return json({ error: 'not found' }, 404);
+  return json({
+    id: row.id,
+    title: row.title,
+    category: normalizeCategory(row.category),
+    questions: JSON.parse(row.questions),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  });
 });
 
 export const onRequestPut = safe(async ({ request, env, params }) => {
   if (!isAdmin(request, env)) {
     return json({ error: 'unauthorized' }, 401);
   }
-  const raw = await env.QUIZ_KV.get(quizKey(params.id));
-  if (!raw) return json({ error: 'not found' }, 404);
+  const existing = await env.DB.prepare('SELECT * FROM quizzes WHERE id = ?').bind(params.id).first();
+  if (!existing) return json({ error: 'not found' }, 404);
 
   let body;
   try {
@@ -21,33 +29,35 @@ export const onRequestPut = safe(async ({ request, env, params }) => {
     return json({ error: 'invalid JSON body' }, 400);
   }
 
-  const existing = JSON.parse(raw);
   const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : existing.title;
   const category = body.category !== undefined ? normalizeCategory(body.category) : normalizeCategory(existing.category);
-  const questions = body.questions !== undefined ? body.questions : existing.questions;
+  const questions = body.questions !== undefined ? body.questions : JSON.parse(existing.questions);
   if (!validateQuestions(questions)) {
     return json({ error: 'questions must be a non-empty array of {question, answer} strings' }, 400);
   }
 
   const now = new Date().toISOString();
-  const updated = { ...existing, title, category, questions, updatedAt: now };
-  await env.QUIZ_KV.put(quizKey(params.id), JSON.stringify(updated));
 
-  const list = await getQuizIndex(env);
-  const idx = list.findIndex(x => x.id === params.id);
-  const entry = { id: params.id, title, category, count: questions.length, updatedAt: now };
-  if (idx >= 0) list[idx] = entry; else list.push(entry);
-  await saveQuizIndex(env, list);
+  await env.DB.prepare(
+    'UPDATE quizzes SET title = ?, category = ?, questions = ?, updated_at = ? WHERE id = ?'
+  ).bind(title, category, JSON.stringify(questions), now, params.id).run();
 
-  return json(updated);
+  return json({
+    id: params.id,
+    title,
+    category,
+    questions,
+    createdAt: existing.created_at,
+    updatedAt: now,
+  });
 });
 
 export const onRequestDelete = safe(async ({ request, env, params }) => {
   if (!isAdmin(request, env)) {
     return json({ error: 'unauthorized' }, 401);
   }
-  await env.QUIZ_KV.delete(quizKey(params.id));
-  const list = await getQuizIndex(env);
-  await saveQuizIndex(env, list.filter(x => x.id !== params.id));
+  // FK制約のCASCADEに頼らず、進捗行を明示的に削除してから本体を削除する
+  await env.DB.prepare('DELETE FROM progress WHERE quiz_id = ?').bind(params.id).run();
+  await env.DB.prepare('DELETE FROM quizzes WHERE id = ?').bind(params.id).run();
   return json({ ok: true });
 });

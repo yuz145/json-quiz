@@ -1,0 +1,11 @@
+name = "json-quiz"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "."
+
+# 本番（Gitに接続したCloudflare Pagesプロジェクト）へのD1バインディングは
+# ダッシュボード側 (Settings > Functions > D1 database bindings) の設定が優先されます。
+# この記述は主に `wrangler pages dev` / `wrangler d1 execute` などローカル・CLI操作向けです。
+[[d1_databases]]
+binding = "DB"
+database_name = "json-quiz-db"
+database_id = "62a245a2-a921-4c00-878b-571c92fbffe2"
