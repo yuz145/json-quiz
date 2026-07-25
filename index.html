@@ -262,7 +262,19 @@
   .btn-correct:hover { background: var(--accent); color: #fff; }
   .btn-wrong { background: #ffebee; border-color: var(--danger); color: var(--danger); }
   .btn-wrong:hover { background: var(--danger); color: #fff; }
-  .key-hint { display: inline-block; margin-left: 6px; padding: 1px 6px; font-size: 11px; font-weight: normal; border-radius: 4px; background: rgba(0,0,0,0.12); color: inherit; opacity: 0.75; vertical-align: middle; }
+  .key-hint {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #333;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+    vertical-align: middle;
+  }
   .btn-subtle {
     font-size: 13px;
     font-weight: 500;
@@ -370,8 +382,8 @@
     </div>
     <div id="auto-hint-badge" style="display:none;"></div>
     <div class="judge-row" id="judge-row" style="display:none;">
-      <button class="btn-correct" id="mark-correct">正解した<span class="key-hint" id="mark-correct-key-hint">Enter / F</span></button>
-      <button class="btn-wrong" id="mark-wrong">不正解だった<span class="key-hint" id="mark-wrong-key-hint">Space / J</span></button>
+      <button class="btn-wrong" id="mark-wrong">不正解だった<span class="key-hint" id="mark-wrong-key-hint">Space / F</span></button>
+      <button class="btn-correct" id="mark-correct">正解した<span class="key-hint" id="mark-correct-key-hint">Enter / J</span></button>
     </div>
     <div class="nav-row">
       <button id="back-to-setup" class="btn-subtle">← 最初に戻る</button>
@@ -410,7 +422,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-10';
+const APP_VERSION = '2026-07-25-11';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -832,14 +844,14 @@ function renderQuestion() {
 // 判定結果と同じ側のボタンにEnterのヒントを出す（Spaceは常に不正解側の固定キーなので出さない）。
 function updateJudgeKeyHints(hasAutoJudgment, autoJudgmentIsMatch) {
   if (!hasAutoJudgment) {
-    document.getElementById('mark-correct-key-hint').textContent = 'Enter / F';
-    document.getElementById('mark-wrong-key-hint').textContent = 'Space / J';
+    document.getElementById('mark-correct-key-hint').textContent = 'Enter / J';
+    document.getElementById('mark-wrong-key-hint').textContent = 'Space / F';
   } else if (autoJudgmentIsMatch) {
-    document.getElementById('mark-correct-key-hint').textContent = 'Enter / F';
-    document.getElementById('mark-wrong-key-hint').textContent = 'J';
+    document.getElementById('mark-correct-key-hint').textContent = 'Enter / J';
+    document.getElementById('mark-wrong-key-hint').textContent = 'F';
   } else {
-    document.getElementById('mark-correct-key-hint').textContent = 'F';
-    document.getElementById('mark-wrong-key-hint').textContent = 'Enter / J';
+    document.getElementById('mark-correct-key-hint').textContent = 'J';
+    document.getElementById('mark-wrong-key-hint').textContent = 'Enter / F';
   }
 }
 
@@ -1028,10 +1040,10 @@ document.addEventListener('keydown', (e) => {
     if (key === 'Enter' && hasAutoJudgment) {
       // 完全一致チェックの自動判定バッジが出ている場合、Enterはその結果をそのまま確定する
       markCorrect = badge.classList.contains('match');
-    } else if (key === 'Enter' || lowerKey === 'f') {
+    } else if (key === 'Enter' || lowerKey === 'j') {
       markCorrect = true;
     } else {
-      // Space または j （自動判定を手動で上書きする場合も含む）
+      // Space または f （自動判定を手動で上書きする場合も含む）
       markCorrect = false;
     }
 
