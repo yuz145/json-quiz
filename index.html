@@ -243,8 +243,8 @@
     </div>
 
     <div class="row" id="global-settings-row">
-      <button id="shuffle-toggle" class="toggle-btn off">シャッフル: OFF</button>
-      <button id="answer-mode-toggle" class="toggle-btn off">回答形式: 答えを見る</button>
+      <button id="shuffle-toggle" class="toggle-btn on">シャッフル: ON</button>
+      <button id="answer-mode-toggle" class="toggle-btn on">回答形式: 文字入力</button>
     </div>
 
     <div id="quiz-sets-section" style="display:none; margin-bottom:16px;">
@@ -313,10 +313,10 @@ let order = [];
 let idx = 0;
 let correct = 0;
 let wrong = 0;
-let shuffleOn = false;
+let shuffleOn = true;
 let wrongIndices = [];
 let mode = 'normal'; // 'normal' | 'review'
-let answerMode = 'self'; // 'self' | 'type'
+let answerMode = 'type'; // 'self' | 'type'
 let currentQuizId = null;   // KV上のクイズID（貼り付け/ファイル読み込みの場合はnull）
 
 const setupScreen = document.getElementById('setup-screen');
@@ -341,6 +341,32 @@ function updateAnswerModeToggle() {
     '回答形式: ' + (answerMode === 'self' ? '答えを見る' : '文字入力')
   );
 }
+
+const SETTINGS_KEY = 'quizAppSettings_v1';
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (typeof data.shuffleOn === 'boolean') shuffleOn = data.shuffleOn;
+    if (data.answerMode === 'self' || data.answerMode === 'type') answerMode = data.answerMode;
+  } catch (e) {
+    // 壊れた設定値は無視してデフォルトのまま使う
+  }
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ shuffleOn, answerMode }));
+  } catch (e) {
+    // 保存できなくても致命的ではない（次回はデフォルト設定になるだけ）
+  }
+}
+
+loadSettings();
+updateShuffleToggle();
+updateAnswerModeToggle();
 
 const STORAGE_KEY = 'quizAppProgress_v1';
 const DEVICE_ID_KEY = 'quizAppDeviceId';
@@ -586,11 +612,13 @@ loadQuizSetList();
 document.getElementById('shuffle-toggle').addEventListener('click', () => {
   shuffleOn = !shuffleOn;
   updateShuffleToggle();
+  saveSettings();
 });
 
 document.getElementById('answer-mode-toggle').addEventListener('click', () => {
   answerMode = answerMode === 'self' ? 'type' : 'self';
   updateAnswerModeToggle();
+  saveSettings();
 });
 
 function startQuizFromArray(data) {
