@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>クイズ</title>
 <style>
   :root {
@@ -177,10 +177,29 @@
     min-height: 110px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
   }
+  .question-area {
+    position: sticky;
+    top: 0;
+    background: var(--card);
+    padding-top: env(safe-area-inset-top, 0px);
+    z-index: 5;
+  }
   .q-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
   .q-text { font-size: 18px; line-height: 1.5; font-weight: 600; word-break: break-word; }
   .a-block { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
   .a-text { font-size: 17px; color: var(--accent-dark); font-weight: bold; word-break: break-word; }
+  #user-answer-line { font-size: 13px; color: var(--muted); margin-top: 6px; word-break: break-word; }
+  #auto-hint-badge {
+    font-size: 15px;
+    font-weight: bold;
+    text-align: center;
+    padding: 10px 14px;
+    border-radius: 10px;
+    margin-top: 10px;
+    border: 2px solid transparent;
+  }
+  #auto-hint-badge.match { background: #e8f5e9; color: var(--accent-dark); border-color: var(--accent); }
+  #auto-hint-badge.mismatch { background: #ffebee; color: var(--danger); border-color: var(--danger); }
   .judge-row { display: flex; gap: 8px; margin-top: 12px; }
   .judge-row button { flex: 1 1 calc(50% - 4px); min-height: 48px; font-size: 16px; font-weight: bold; }
   .btn-correct { background: #e8f5e9; border-color: var(--accent); color: var(--accent-dark); }
@@ -267,12 +286,14 @@
       <span class="score">正解 <span id="correct-count">0</span> / 不正解 <span id="wrong-count">0</span></span>
     </div>
     <div class="card">
-      <div class="q-label">問題</div>
-      <div class="q-text" id="q-text"></div>
+      <div class="question-area" id="question-area">
+        <div class="q-label">問題</div>
+        <div class="q-text" id="q-text"></div>
+      </div>
       <div class="a-block" id="a-block" style="display:none;">
         <div class="q-label">答え</div>
         <div class="a-text" id="a-text"></div>
-        <div id="auto-hint" style="display:none; font-size:13px; margin-top:6px;"></div>
+        <div id="user-answer-line" style="display:none;"></div>
       </div>
     </div>
     <div class="row" style="margin-top:10px;" id="reveal-row">
@@ -282,6 +303,7 @@
       <input type="text" id="type-answer-input" placeholder="答えを入力してEnterまたは「回答する」">
       <button class="primary full-width" id="submit-answer-btn">回答する</button>
     </div>
+    <div id="auto-hint-badge" style="display:none;"></div>
     <div class="judge-row" id="judge-row" style="display:none;">
       <button class="btn-correct" id="mark-correct">正解した</button>
       <button class="btn-wrong" id="mark-wrong">不正解だった</button>
@@ -649,7 +671,10 @@ function renderQuestion() {
   document.getElementById('a-text').textContent = item.answer;
   document.getElementById('a-block').style.display = 'none';
   document.getElementById('judge-row').style.display = 'none';
-  document.getElementById('auto-hint').style.display = 'none';
+  document.getElementById('user-answer-line').style.display = 'none';
+  const badge = document.getElementById('auto-hint-badge');
+  badge.style.display = 'none';
+  badge.classList.remove('match', 'mismatch');
   document.getElementById('type-answer-input').value = '';
   document.getElementById('next-btn').disabled = true;
   if (answerMode === 'type') {
@@ -680,11 +705,16 @@ function submitTypedAnswer() {
   document.getElementById('a-block').style.display = 'block';
   document.getElementById('judge-row').style.display = 'flex';
   document.getElementById('type-answer-row').style.display = 'none';
-  const hint = document.getElementById('auto-hint');
-  hint.style.display = 'block';
-  hint.style.color = isMatch ? 'var(--accent-dark)' : 'var(--danger)';
-  hint.textContent = '自動判定（完全一致）: ' + (isMatch ? '一致' : '不一致')
-    + ' ／ あなたの回答: ' + (userAnswer || '（未入力）');
+
+  const userAnswerLine = document.getElementById('user-answer-line');
+  userAnswerLine.style.display = 'block';
+  userAnswerLine.textContent = 'あなたの回答: ' + (userAnswer || '（未入力）');
+
+  const badge = document.getElementById('auto-hint-badge');
+  badge.style.display = 'block';
+  badge.classList.toggle('match', isMatch);
+  badge.classList.toggle('mismatch', !isMatch);
+  badge.textContent = isMatch ? '✓ 一致（自動判定）' : '✗ 不一致（自動判定）';
 }
 
 document.getElementById('submit-answer-btn').addEventListener('click', submitTypedAnswer);
@@ -693,6 +723,13 @@ document.getElementById('type-answer-input').addEventListener('keydown', (e) => 
     e.preventDefault();
     submitTypedAnswer();
   }
+});
+document.getElementById('type-answer-input').addEventListener('focus', () => {
+  // iOSはキーボード表示のアニメーションが完了してからでないと
+  // scrollIntoViewの計算基準（ビューポート高さ）がずれるため少し待つ
+  setTimeout(() => {
+    document.getElementById('type-answer-input').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 300);
 });
 
 document.getElementById('mark-correct').addEventListener('click', () => {
