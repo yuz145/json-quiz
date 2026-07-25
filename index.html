@@ -146,11 +146,6 @@
     border-color: #ced4da;
     color: #495057;
   }
-  .toggle-btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-    box-shadow: none;
-  }
   #quiz-screen { display: none; }
   .progress-bar-outer {
     width: 100%;
@@ -333,10 +328,7 @@
     <div id="global-settings-row">
       <div class="settings-row">
         <button id="shuffle-toggle" class="toggle-btn on">シャッフル: ON</button>
-      </div>
-      <div class="settings-row">
         <button id="answer-mode-toggle" class="toggle-btn on">回答形式: 文字入力</button>
-        <button id="auto-correct-toggle" class="toggle-btn on">完全一致で自動正解: ON</button>
       </div>
     </div>
 
@@ -423,7 +415,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-12';
+const APP_VERSION = '2026-07-25-13';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -459,7 +451,6 @@ let awaitingJudgeConfirmation = false; // 「正解した/不正解だった」�
                                         // 入力欄のフォーカス状態やdisplayの一時的なタイミングに依存させないための専用フラグ
 let mode = 'normal'; // 'normal' | 'review'
 let answerMode = 'type'; // 'self' | 'type'
-let autoCorrectOnMatch = true; // 「文字入力」モードで完全一致した場合に自動で正解にするか
 let currentQuizId = null;   // KV上のクイズID（貼り付け/ファイル読み込みの場合はnull）
 
 const setupScreen = document.getElementById('setup-screen');
@@ -485,14 +476,6 @@ function updateAnswerModeToggle() {
   );
 }
 
-function updateAutoCorrectToggle() {
-  const el = document.getElementById('auto-correct-toggle');
-  // 「文字入力」モードのときだけ意味を持つ設定。非表示にするとボタンの数が変わりレイアウトが
-  // ガタつくため、「答えを見る」モードでは非表示ではなくグレーアウト(disabled)にするだけにする
-  el.disabled = answerMode !== 'type';
-  setToggleButton(el, autoCorrectOnMatch, '完全一致で自動正解: ' + (autoCorrectOnMatch ? 'ON' : 'OFF'));
-}
-
 const SETTINGS_KEY = 'quizAppSettings_v1';
 
 function loadSettings() {
@@ -502,7 +485,6 @@ function loadSettings() {
     const data = JSON.parse(raw);
     if (typeof data.shuffleOn === 'boolean') shuffleOn = data.shuffleOn;
     if (data.answerMode === 'self' || data.answerMode === 'type') answerMode = data.answerMode;
-    if (typeof data.autoCorrectOnMatch === 'boolean') autoCorrectOnMatch = data.autoCorrectOnMatch;
   } catch (e) {
     // 壊れた設定値は無視してデフォルトのまま使う
   }
@@ -510,7 +492,7 @@ function loadSettings() {
 
 function saveSettings() {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ shuffleOn, answerMode, autoCorrectOnMatch }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ shuffleOn, answerMode }));
   } catch (e) {
     // 保存できなくても致命的ではない（次回はデフォルト設定になるだけ）
   }
@@ -519,7 +501,6 @@ function saveSettings() {
 loadSettings();
 updateShuffleToggle();
 updateAnswerModeToggle();
-updateAutoCorrectToggle();
 
 const STORAGE_KEY = 'quizAppProgress_v1';
 const DEVICE_ID_KEY = 'quizAppDeviceId';
@@ -651,7 +632,6 @@ function checkResume() {
     pendingSyncCount = 0;
     updateShuffleToggle();
     updateAnswerModeToggle();
-    updateAutoCorrectToggle();
     banner.style.display = 'none';
     setupScreen.style.display = 'none';
     quizScreen.style.display = 'block';
@@ -777,13 +757,6 @@ document.getElementById('shuffle-toggle').addEventListener('click', () => {
 document.getElementById('answer-mode-toggle').addEventListener('click', () => {
   answerMode = answerMode === 'self' ? 'type' : 'self';
   updateAnswerModeToggle();
-  updateAutoCorrectToggle();
-  saveSettings();
-});
-
-document.getElementById('auto-correct-toggle').addEventListener('click', () => {
-  autoCorrectOnMatch = !autoCorrectOnMatch;
-  updateAutoCorrectToggle();
   saveSettings();
 });
 
@@ -831,10 +804,14 @@ function renderQuestion() {
     document.getElementById('reveal-row').style.display = 'none';
     document.getElementById('type-answer-row').style.display = 'flex';
     document.getElementById('type-answer-input').focus();
+    document.getElementById('next-btn').style.display = '';
   } else {
     document.getElementById('reveal-row').style.display = 'flex';
     document.getElementById('type-answer-row').style.display = 'none';
     document.getElementById('reveal-btn').style.display = 'block';
+    // 自己採点モードは正解した/不正解だったを押した時点で自動的に次へ進むため、
+    // 「次の問題」ボタン自体は表示しない（内部的にはclick()で流用する）
+    document.getElementById('next-btn').style.display = 'none';
   }
   document.getElementById('q-counter').textContent = (idx + 1) + ' / ' + order.length + '問' + (mode === 'review' ? '（復習）' : '');
   document.getElementById('progress-bar').style.width = Math.round(((idx) / order.length) * 100) + '%';
@@ -842,26 +819,10 @@ function renderQuestion() {
   document.getElementById('wrong-count').textContent = wrong;
 }
 
-// 自動判定バッジが出ている場合、Enterはその判定結果をそのまま確定するため、
-// 判定結果と同じ側のボタンにEnterのヒントを出す（Spaceは常に不正解側の固定キーなので出さない）。
-function updateJudgeKeyHints(hasAutoJudgment, autoJudgmentIsMatch) {
-  if (!hasAutoJudgment) {
-    document.getElementById('mark-correct-key-hint').textContent = 'Enter / J';
-    document.getElementById('mark-wrong-key-hint').textContent = 'Space / F';
-  } else if (autoJudgmentIsMatch) {
-    document.getElementById('mark-correct-key-hint').textContent = 'Enter / J';
-    document.getElementById('mark-wrong-key-hint').textContent = 'F';
-  } else {
-    document.getElementById('mark-correct-key-hint').textContent = 'J';
-    document.getElementById('mark-wrong-key-hint').textContent = 'Enter / F';
-  }
-}
-
 document.getElementById('reveal-btn').addEventListener('click', () => {
   document.getElementById('a-block').style.display = 'block';
   document.getElementById('judge-row').style.display = 'flex';
   document.getElementById('reveal-btn').style.display = 'none';
-  updateJudgeKeyHints(false);
   awaitingJudgeConfirmation = true;
 });
 
@@ -883,19 +844,13 @@ function submitTypedAnswer() {
   badge.classList.toggle('match', isMatch);
   badge.classList.toggle('mismatch', !isMatch);
 
-  if (isMatch && autoCorrectOnMatch) {
+  if (isMatch) {
     // 完全一致した場合、正解した/不正解だったボタンを待たずに自動で正解として確定する
     badge.textContent = '✓ 一致';
     document.getElementById('judge-row').style.display = 'none';
     correct++;
     recordAnswerHistory(true);
     finishJudge();
-  } else if (isMatch) {
-    // 一致だが「完全一致で自動正解」がOFF: 従来通り正解した/不正解だったの2択で確定させる
-    badge.textContent = '✓ 一致（自動判定）';
-    document.getElementById('judge-row').style.display = 'flex';
-    updateJudgeKeyHints(true, true);
-    awaitingJudgeConfirmation = true;
   } else {
     // 不一致: 「不正解」を既定の結果として即座に確定し、例外的に正解へ上書きする
     // ための小さいボタンだけを表示する（次の問題ボタンのEnterでそのまま不正解確定へ進む）
@@ -939,12 +894,14 @@ document.getElementById('mark-correct').addEventListener('click', () => {
   correct++;
   recordAnswerHistory(true);
   finishJudge();
+  document.getElementById('next-btn').click();
 });
 document.getElementById('mark-wrong').addEventListener('click', () => {
   wrong++;
   wrongIndices.push(order[idx]);
   recordAnswerHistory(false);
   finishJudge();
+  document.getElementById('next-btn').click();
 });
 document.getElementById('override-correct-btn').addEventListener('click', () => {
   // 自動判定「不一致」で既に不正解として即時確定した分を、正解として上書きする
@@ -1063,28 +1020,14 @@ document.addEventListener('keydown', (e) => {
   const isRelevantKey = key === 'Enter' || key === ' ' || key === 'Spacebar' || lowerKey === 'f' || lowerKey === 'j';
   if (!isRelevantKey) return;
 
-  // 結果確定待ちの状態は、入力欄にフォーカスが残っているかどうかに関わらず必ずここで処理する。
-  // （blur()やdisplay:noneのタイミングに依存すると、ブラウザによっては入力欄が実質フォーカスを
-  // 保持したままになり、Enter/Spaceが入力欄に食われて反応しなくなることがあるため）
+  // 自己採点モードで答えを表示した後の確定待ち状態。入力欄にフォーカスが残っているかどうかに
+  // 関わらず必ずここで処理する（blur()やdisplay:noneのタイミングに依存すると、ブラウザによっては
+  // 入力欄が実質フォーカスを保持したままになり、Enter/Spaceが入力欄に食われて反応しなくなるため）。
   if (awaitingJudgeConfirmation) {
     e.preventDefault();
-    const badge = document.getElementById('auto-hint-badge');
-    const hasAutoJudgment = badge.style.display === 'block'
-      && (badge.classList.contains('match') || badge.classList.contains('mismatch'));
-
-    let markCorrect;
-    if (key === 'Enter' && hasAutoJudgment) {
-      // 完全一致チェックの自動判定バッジが出ている場合、Enterはその結果をそのまま確定する
-      markCorrect = badge.classList.contains('match');
-    } else if (key === 'Enter' || lowerKey === 'j') {
-      markCorrect = true;
-    } else {
-      // Space または f （自動判定を手動で上書きする場合も含む）
-      markCorrect = false;
-    }
-
+    const markCorrect = key === 'Enter' || lowerKey === 'j';
+    // mark-correct/mark-wrongのclickハンドラ内で次の問題への遷移まで行う
     document.getElementById(markCorrect ? 'mark-correct' : 'mark-wrong').click();
-    document.getElementById('next-btn').click();
     return;
   }
 
