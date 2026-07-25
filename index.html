@@ -116,7 +116,8 @@
     justify-content: center;
   }
 
-  #global-settings-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: nowrap; }
+  #global-settings-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+  .settings-row { display: flex; gap: 8px; flex-wrap: nowrap; }
   .toggle-btn {
     flex: 1 1 0;
     font-size: 15px;
@@ -316,10 +317,14 @@
       </div>
     </div>
 
-    <div class="row" id="global-settings-row">
-      <button id="shuffle-toggle" class="toggle-btn on">シャッフル: ON</button>
-      <button id="answer-mode-toggle" class="toggle-btn on">回答形式: 文字入力</button>
-      <button id="auto-correct-toggle" class="toggle-btn on">完全一致で自動正解: ON</button>
+    <div id="global-settings-row">
+      <div class="settings-row">
+        <button id="shuffle-toggle" class="toggle-btn on">シャッフル: ON</button>
+      </div>
+      <div class="settings-row">
+        <button id="answer-mode-toggle" class="toggle-btn on">回答形式: 文字入力</button>
+        <button id="auto-correct-toggle" class="toggle-btn on">完全一致で自動正解: ON</button>
+      </div>
     </div>
 
     <div id="quiz-sets-section" style="display:none; margin-bottom:16px;">
@@ -404,7 +409,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-3';
+const APP_VERSION = '2026-07-25-4';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
