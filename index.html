@@ -314,6 +314,7 @@
     <div class="row" id="global-settings-row">
       <button id="shuffle-toggle" class="toggle-btn on">シャッフル: ON</button>
       <button id="answer-mode-toggle" class="toggle-btn on">回答形式: 文字入力</button>
+      <button id="auto-correct-toggle" class="toggle-btn on">完全一致で自動正解: ON</button>
     </div>
 
     <div id="quiz-sets-section" style="display:none; margin-bottom:16px;">
@@ -398,6 +399,29 @@
 </div>
 
 <script>
+const APP_VERSION = '2026-07-25-1';
+(function enforceLatestVersion() {
+  const VERSION_KEY = 'quizAppVersion';
+  let storedVersion;
+  try {
+    storedVersion = localStorage.getItem(VERSION_KEY);
+  } catch (e) {
+    return; // localStorageが使えない環境ではバージョンチェック自体を諦める
+  }
+  if (storedVersion === null) {
+    // 初回訪問者はそのまま通し、現在のバージョンだけ記録する（リロードしない）
+    try { localStorage.setItem(VERSION_KEY, APP_VERSION); } catch (e) {}
+    return;
+  }
+  if (storedVersion !== APP_VERSION) {
+    // 既存ユーザーが古いキャッシュを持っている場合のみ、1回だけ強制リロードする。
+    // 先にバージョンを更新してから reload するため、次回以降は一致して無限リロードにならない。
+    try { localStorage.setItem(VERSION_KEY, APP_VERSION); } catch (e) {}
+    location.reload();
+    throw new Error('quizApp: reloading to pick up APP_VERSION ' + APP_VERSION); // 以降の初期化処理を止める
+  }
+})();
+
 let quiz = [];
 let order = [];
 let idx = 0;
@@ -409,6 +433,7 @@ let answerHistory = []; // 今回の周回で解答した順の記録: {question
 let lastTypedAnswer = null; // 直近に「回答する」した入力文字列（自己採点モードではnullのまま）
 let mode = 'normal'; // 'normal' | 'review'
 let answerMode = 'type'; // 'self' | 'type'
+let autoCorrectOnMatch = true; // 「文字入力」モードで完全一致した場合に自動で正解にするか
 let currentQuizId = null;   // KV上のクイズID（貼り付け/ファイル読み込みの場合はnull）
 
 const setupScreen = document.getElementById('setup-screen');
@@ -434,6 +459,13 @@ function updateAnswerModeToggle() {
   );
 }
 
+function updateAutoCorrectToggle() {
+  const el = document.getElementById('auto-correct-toggle');
+  // 「文字入力」モードのときだけ意味を持つ設定なので、自己採点モードでは非表示にする
+  el.style.display = answerMode === 'type' ? 'inline-flex' : 'none';
+  setToggleButton(el, autoCorrectOnMatch, '完全一致で自動正解: ' + (autoCorrectOnMatch ? 'ON' : 'OFF'));
+}
+
 const SETTINGS_KEY = 'quizAppSettings_v1';
 
 function loadSettings() {
@@ -443,6 +475,7 @@ function loadSettings() {
     const data = JSON.parse(raw);
     if (typeof data.shuffleOn === 'boolean') shuffleOn = data.shuffleOn;
     if (data.answerMode === 'self' || data.answerMode === 'type') answerMode = data.answerMode;
+    if (typeof data.autoCorrectOnMatch === 'boolean') autoCorrectOnMatch = data.autoCorrectOnMatch;
   } catch (e) {
     // 壊れた設定値は無視してデフォルトのまま使う
   }
@@ -450,7 +483,7 @@ function loadSettings() {
 
 function saveSettings() {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ shuffleOn, answerMode }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ shuffleOn, answerMode, autoCorrectOnMatch }));
   } catch (e) {
     // 保存できなくても致命的ではない（次回はデフォルト設定になるだけ）
   }
@@ -459,6 +492,7 @@ function saveSettings() {
 loadSettings();
 updateShuffleToggle();
 updateAnswerModeToggle();
+updateAutoCorrectToggle();
 
 const STORAGE_KEY = 'quizAppProgress_v1';
 const DEVICE_ID_KEY = 'quizAppDeviceId';
@@ -554,6 +588,7 @@ function checkResume() {
     currentQuizId = data.currentQuizId || null;
     updateShuffleToggle();
     updateAnswerModeToggle();
+    updateAutoCorrectToggle();
     banner.style.display = 'none';
     setupScreen.style.display = 'none';
     quizScreen.style.display = 'block';
@@ -710,6 +745,13 @@ document.getElementById('shuffle-toggle').addEventListener('click', () => {
 document.getElementById('answer-mode-toggle').addEventListener('click', () => {
   answerMode = answerMode === 'self' ? 'type' : 'self';
   updateAnswerModeToggle();
+  updateAutoCorrectToggle();
+  saveSettings();
+});
+
+document.getElementById('auto-correct-toggle').addEventListener('click', () => {
+  autoCorrectOnMatch = !autoCorrectOnMatch;
+  updateAutoCorrectToggle();
   saveSettings();
 });
 
@@ -776,7 +818,6 @@ function submitTypedAnswer() {
   const isMatch = userAnswer.length > 0 && userAnswer === item.answer.trim();
   lastTypedAnswer = userAnswer;
   document.getElementById('a-block').style.display = 'block';
-  document.getElementById('judge-row').style.display = 'flex';
   document.getElementById('type-answer-row').style.display = 'none';
 
   const userAnswerLine = document.getElementById('user-answer-line');
@@ -787,7 +828,18 @@ function submitTypedAnswer() {
   badge.style.display = 'block';
   badge.classList.toggle('match', isMatch);
   badge.classList.toggle('mismatch', !isMatch);
-  badge.textContent = isMatch ? '✓ 一致（自動判定）' : '✗ 不一致（自動判定）';
+
+  if (isMatch && autoCorrectOnMatch) {
+    // 完全一致した場合、正解した/不正解だったボタンを待たずに自動で正解として確定する
+    badge.textContent = '✓ 一致（自動判定・自動的に正解にしました）';
+    document.getElementById('judge-row').style.display = 'none';
+    correct++;
+    recordAnswerHistory(true);
+    finishJudge();
+  } else {
+    badge.textContent = isMatch ? '✓ 一致（自動判定）' : '✗ 不一致（自動判定）';
+    document.getElementById('judge-row').style.display = 'flex';
+  }
 }
 
 document.getElementById('submit-answer-btn').addEventListener('click', submitTypedAnswer);
