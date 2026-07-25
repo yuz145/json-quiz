@@ -409,7 +409,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-4';
+const APP_VERSION = '2026-07-25-5';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -836,6 +836,7 @@ function submitTypedAnswer() {
   lastTypedAnswer = userAnswer;
   document.getElementById('a-block').style.display = 'block';
   document.getElementById('type-answer-row').style.display = 'none';
+  document.getElementById('type-answer-input').blur(); // 結果確定待ちの間はEnter/Spaceを入力欄に食われないようにする
 
   const userAnswerLine = document.getElementById('user-answer-line');
   userAnswerLine.style.display = 'block';
@@ -863,6 +864,8 @@ document.getElementById('submit-answer-btn').addEventListener('click', submitTyp
 document.getElementById('type-answer-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
+    e.stopPropagation(); // このEnterで送信した直後に、documentのキー操作ハンドラが同じ押下を
+                          // 「確定待ち状態でのEnter」として二重に処理してしまうのを防ぐ
     submitTypedAnswer();
   }
 });
@@ -969,6 +972,63 @@ document.getElementById('next-btn').addEventListener('click', () => {
   } else {
     renderQuestion();
     saveProgress();
+  }
+});
+
+// クイズ画面をキーボードだけで進められるようにする。
+// 状態（回答入力中／結果確定待ち／答え表示前／確定済みで次へ進める状態）ごとにキーの意味を切り替える。
+document.addEventListener('keydown', (e) => {
+  if (quizScreen.style.display !== 'block') return;
+  const key = e.key;
+  const lowerKey = key.length === 1 ? key.toLowerCase() : key;
+  const isRelevantKey = key === 'Enter' || key === ' ' || key === 'Spacebar' || lowerKey === 'f' || lowerKey === 'j';
+  if (!isRelevantKey) return;
+
+  const typeAnswerRow = document.getElementById('type-answer-row');
+  if (typeAnswerRow.style.display !== 'none') {
+    // 文字入力モードでまだ回答を送信していない間は、入力欄自身のkeydown処理に任せる
+    // （Enterでの送信は入力欄側のリスナーが担当。Space/F/Jは通常通り文字として入力させる）
+    return;
+  }
+
+  // ここから先はSpaceキーによるページスクロールなど、ブラウザ標準の挙動を止める
+  e.preventDefault();
+
+  const judgeRow = document.getElementById('judge-row');
+  const revealRow = document.getElementById('reveal-row');
+  const nextBtn = document.getElementById('next-btn');
+  const badge = document.getElementById('auto-hint-badge');
+
+  if (judgeRow.style.display === 'flex') {
+    // 完全一致チェックの自動判定バッジが出ている（文字入力モードで送信済み）場合、
+    // Enterは「自動判定の結果をそのまま確定」する。F/JまたはSpaceはいつでも手動で上書きできる。
+    const hasAutoJudgment = badge.style.display === 'block'
+      && (badge.classList.contains('match') || badge.classList.contains('mismatch'));
+
+    let markCorrect;
+    if (key === 'Enter' && hasAutoJudgment) {
+      markCorrect = badge.classList.contains('match');
+    } else if (key === 'Enter' || lowerKey === 'f') {
+      markCorrect = true;
+    } else {
+      // Space または j
+      markCorrect = false;
+    }
+
+    document.getElementById(markCorrect ? 'mark-correct' : 'mark-wrong').click();
+    nextBtn.click();
+    return;
+  }
+
+  if (revealRow.style.display === 'flex' && key === 'Enter') {
+    // 自己採点モードでまだ答えを表示していない: Enterで答えを表示する
+    document.getElementById('reveal-btn').click();
+    return;
+  }
+
+  if (!nextBtn.disabled) {
+    // 完全一致による自動正解などで既に次へ進める状態になっている場合は、そのまま次の問題へ
+    nextBtn.click();
   }
 });
 
