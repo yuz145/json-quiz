@@ -848,7 +848,7 @@ function submitTypedAnswer() {
 
   if (isMatch && autoCorrectOnMatch) {
     // 完全一致した場合、正解した/不正解だったボタンを待たずに自動で正解として確定する
-    badge.textContent = '✓ 一致（自動判定・自動的に正解にしました）';
+    badge.textContent = '✓ 一致';
     document.getElementById('judge-row').style.display = 'none';
     correct++;
     recordAnswerHistory(true);
