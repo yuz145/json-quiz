@@ -410,7 +410,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-9';
+const APP_VERSION = '2026-07-25-10';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -828,11 +828,19 @@ function renderQuestion() {
   document.getElementById('wrong-count').textContent = wrong;
 }
 
-// 自動判定バッジが出ている場合、Enter/Spaceの意味はその判定結果に準じるため固定の正解/不正解キーとして
-// 案内できない。その場合はF/Jだけをヒントに表示する（Enter/Spaceは自動判定に準じる旨、バッジ側で示す）。
-function updateJudgeKeyHints(hasAutoJudgment) {
-  document.getElementById('mark-correct-key-hint').textContent = hasAutoJudgment ? 'F' : 'Enter / F';
-  document.getElementById('mark-wrong-key-hint').textContent = hasAutoJudgment ? 'J' : 'Space / J';
+// 自動判定バッジが出ている場合、Enterはその判定結果をそのまま確定するため、
+// 判定結果と同じ側のボタンにEnterのヒントを出す（Spaceは常に不正解側の固定キーなので出さない）。
+function updateJudgeKeyHints(hasAutoJudgment, autoJudgmentIsMatch) {
+  if (!hasAutoJudgment) {
+    document.getElementById('mark-correct-key-hint').textContent = 'Enter / F';
+    document.getElementById('mark-wrong-key-hint').textContent = 'Space / J';
+  } else if (autoJudgmentIsMatch) {
+    document.getElementById('mark-correct-key-hint').textContent = 'Enter / F';
+    document.getElementById('mark-wrong-key-hint').textContent = 'J';
+  } else {
+    document.getElementById('mark-correct-key-hint').textContent = 'F';
+    document.getElementById('mark-wrong-key-hint').textContent = 'Enter / J';
+  }
 }
 
 document.getElementById('reveal-btn').addEventListener('click', () => {
@@ -871,7 +879,7 @@ function submitTypedAnswer() {
   } else {
     badge.textContent = isMatch ? '✓ 一致（自動判定）' : '✗ 不一致（自動判定）';
     document.getElementById('judge-row').style.display = 'flex';
-    updateJudgeKeyHints(true);
+    updateJudgeKeyHints(true, isMatch);
     awaitingJudgeConfirmation = true;
   }
 }
