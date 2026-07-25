@@ -38,8 +38,8 @@ export function validateQuestions(questions) {
 }
 
 // KVのTTLに相当する仕組みがD1には無いため、progress系エンドポイントの呼び出しの
-// ついでに1週間以上更新のない行を削除する（呼び出し頻度に依存する簡易的な方式）。
-export const PROGRESS_TTL_SECONDS = 604800;
+// ついでに1ヶ月（30日）以上更新のない行を削除する（呼び出し頻度に依存する簡易的な方式）。
+export const PROGRESS_TTL_SECONDS = 2592000;
 
 export async function cleanupOldProgress(env) {
   const cutoff = new Date(Date.now() - PROGRESS_TTL_SECONDS * 1000).toISOString();

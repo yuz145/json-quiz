@@ -76,7 +76,7 @@ functions/
                               PUT  /api/quiz/:id            クイズセット更新（管理者のみ）
                               DELETE /api/quiz/:id          クイズセット削除（管理者のみ。紐づく進捗も削除）
     progress/[deviceId].js   GET  /api/progress/:deviceId  進捗取得
-                              POST /api/progress/:deviceId  進捗・接続IP・位置情報保存（1週間相当のTTLを疑似実装）
+                              POST /api/progress/:deviceId  進捗・接続IP・位置情報保存（1ヶ月相当のTTLを疑似実装）
     nicknames.js              GET  /api/nicknames           管理者専用: 記録済みIP一覧＋ニックネーム＋最新の位置情報取得
                               POST /api/nicknames           管理者専用: IPにニックネームを設定（空文字で解除）
     admin/auth.js            POST /api/admin/auth         管理者パスワード事前検証
@@ -100,7 +100,7 @@ functions/
 - `category` を省略してクイズセットを作成・更新した場合は `未分類` として扱われます
 - クイズセット一覧の「問題数」は保存された値ではなく、取得時に `json_array_length(questions)` で都度計算しています
 - クイズセットを削除すると、そのクイズに紐づく `progress` 行も併せて削除されます（DBのFOREIGN KEY制約に頼らず、削除処理内で明示的に行っています）
-- KVの `expirationTtl` に相当する仕組みがD1には無いため、`POST /api/progress/:deviceId` が呼ばれるたびに「1週間以上 `updated_at` が更新されていない `progress` 行」を削除する簡易的なクリーンアップを実行しています（`functions/_utils.js` の `cleanupOldProgress`）。アクセスが全く無いクイズの古い進捗はこの方式では削除されませんが、実用上は許容範囲としています
+- KVの `expirationTtl` に相当する仕組みがD1には無いため、`POST /api/progress/:deviceId` が呼ばれるたびに「1ヶ月（30日）以上 `updated_at` が更新されていない `progress` 行」を削除する簡易的なクリーンアップを実行しています（`functions/_utils.js` の `cleanupOldProgress`）。アクセスが全く無いクイズの古い進捗はこの方式では削除されませんが、実用上は許容範囲としています
 - `country` / `region` / `city` はCloudflareエッジが自動的に付与する `request.cf` から取得したもので、外部APIへの問い合わせは発生しません（ローカル開発の `wrangler pages dev` でも疑似的な値が入ります）。これらの列と `ip_nicknames` テーブルの内容は管理者専用API（`/api/nicknames`, `/api/admin/*`）でのみ取得可能で、`/api/progress/:deviceId` や `/api/quiz*` など一般ユーザー向けのレスポンスには含まれません
 - `correct` は「直近の解答結果」、`best_correct` は「これまでの最高正解数」。`POST /api/progress/:deviceId` を呼ぶたびに `best_correct = MAX(既存のbest_correct, 今回のcorrect)` で更新されるため、後から低いスコアで再挑戦しても下がりません
 - `schema.sql` は `CREATE TABLE IF NOT EXISTS` ベースなので、新規にテーブル列を追加した場合、**既存の本番D1には自動反映されません**。列追加のたびに `wrangler d1 execute <DB名> --remote --command="ALTER TABLE ... ADD COLUMN ..."` を手動で実行してから新しいコードをデプロイしてください（実行を忘れると該当列を使うAPIが失敗します）
@@ -163,6 +163,6 @@ GitHub PagesはFunctions/D1のようなサーバー機能を持たない静的�
 
 ## データの保存について
 
-- クイズセットの進捗・成績は、ブラウザの`localStorage`に自動生成されたデバイスIDとクイズセットIDをキーとしてCloudflare D1に保存されます（`localStorage`にも同時に保存され、同じブラウザでのリロード時はそちらを優先して即座に再開できます）。D1側の進捗は1週間操作がないと自動的に削除されます（`POST /api/progress/:deviceId` 呼び出し時のクリーンアップ処理による）
+- クイズセットの進捗・成績は、ブラウザの`localStorage`に自動生成されたデバイスIDとクイズセットIDをキーとしてCloudflare D1に保存されます（`localStorage`にも同時に保存され、同じブラウザでのリロード時はそちらを優先して即座に再開できます）。D1側の進捗は1ヶ月操作がないと自動的に削除されます（`POST /api/progress/:deviceId` 呼び出し時のクリーンアップ処理による）
 - デバイスIDは端末・ブラウザごとに別々に発行されるため、同じ人でも別のブラウザやシークレットモード、別の端末からは別デバイス（＝新規参加者）として扱われます
 - 接続IP・位置情報（国/地域/都市）・ニックネーム・逆引きDNS結果は、パスワード保護された管理画面（`/admin.html`）でのみ確認できます。`index.html` などの一般ユーザー向けページやAPIレスポンスには含まれません
