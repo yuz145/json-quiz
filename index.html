@@ -200,6 +200,56 @@
   }
   #auto-hint-badge.match { background: #e8f5e9; color: var(--accent-dark); border-color: var(--accent); }
   #auto-hint-badge.mismatch { background: #ffebee; color: var(--danger); border-color: var(--danger); }
+  .review-item { border-radius: 10px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--border); }
+  .review-item.correct { background: #e8f5e9; border-color: var(--accent); }
+  .review-item.wrong { background: #ffebee; border-color: var(--danger); }
+  .review-item .review-q { font-size: 14px; font-weight: 700; margin-bottom: 6px; word-break: break-word; }
+  .review-item .review-a-row { font-size: 13px; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+  .review-item .review-label { font-weight: bold; white-space: nowrap; }
+  .review-item.correct .review-label { color: var(--accent-dark); }
+  .review-item.wrong .review-label { color: var(--danger); }
+  .review-item .review-answer { word-break: break-word; }
+  .review-item .review-user-answer { font-size: 12px; color: var(--muted); margin-top: 4px; word-break: break-word; }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 100;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-box {
+    background: var(--card);
+    width: 100%;
+    max-width: 640px;
+    max-height: 85vh;
+    border-radius: 16px 16px 0 0;
+    padding: 16px;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    position: sticky;
+    top: 0;
+    background: var(--card);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-title { font-size: 16px; font-weight: 700; }
+  .qlist-item { border-bottom: 1px solid var(--border); padding: 12px 0; cursor: pointer; }
+  .qlist-item:last-child { border-bottom: none; }
+  .qlist-q { font-size: 14px; font-weight: 600; word-break: break-word; }
+  .qlist-a { font-size: 13px; color: var(--accent-dark); font-weight: bold; margin-top: 8px; display: none; word-break: break-word; }
+  .qlist-a.revealed { display: block; }
+  .qlist-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .judge-row { display: flex; gap: 8px; margin-top: 12px; }
   .judge-row button { flex: 1 1 calc(50% - 4px); min-height: 48px; font-size: 16px; font-weight: bold; }
   .btn-correct { background: #e8f5e9; border-color: var(--accent); color: var(--accent-dark); }
@@ -285,6 +335,9 @@
       <span id="q-counter">1 / 10問</span>
       <span class="score">正解 <span id="correct-count">0</span> / 不正解 <span id="wrong-count">0</span></span>
     </div>
+    <div class="row" style="justify-content:flex-end; margin:0 0 10px;">
+      <button id="question-list-btn" class="btn-subtle" style="font-size:12px; padding:6px 10px; min-height:32px;">📋 問題一覧を見る</button>
+    </div>
     <div class="card">
       <div class="question-area" id="question-area">
         <div class="q-label">問題</div>
@@ -325,8 +378,23 @@
         <button id="edit-again-btn" class="btn-subtle">← 最初に戻る</button>
       </div>
     </div>
+    <div id="answer-review-section" style="display:none; text-align:left; margin-top:20px;">
+      <div class="q-label" style="text-align:left;">解答一覧</div>
+      <div id="answer-review-list"></div>
+    </div>
   </div>
 
+</div>
+
+<div id="question-list-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">📋 問題一覧（<span id="question-list-count">0</span>問）</div>
+      <button id="question-list-close" class="btn-subtle">✕ 閉じる</button>
+    </div>
+    <p style="font-size:12px; color:var(--muted); margin:0 0 10px;">タップすると答えの表示・非表示を切り替えられます。</p>
+    <div id="question-list-body"></div>
+  </div>
 </div>
 
 <script>
@@ -337,6 +405,8 @@ let correct = 0;
 let wrong = 0;
 let shuffleOn = true;
 let wrongIndices = [];
+let answerHistory = []; // 今回の周回で解答した順の記録: {question, correctAnswer, userAnswer, isCorrect}
+let lastTypedAnswer = null; // 直近に「回答する」した入力文字列（自己採点モードではnullのまま）
 let mode = 'normal'; // 'normal' | 'review'
 let answerMode = 'type'; // 'self' | 'type'
 let currentQuizId = null;   // KV上のクイズID（貼り付け/ファイル読み込みの場合はnull）
@@ -656,6 +726,7 @@ function startQuizFromArray(data) {
   correct = 0;
   wrong = 0;
   wrongIndices = [];
+  answerHistory = [];
   mode = 'normal';
   setupScreen.style.display = 'none';
   resultScreen.style.display = 'none';
@@ -676,6 +747,7 @@ function renderQuestion() {
   badge.style.display = 'none';
   badge.classList.remove('match', 'mismatch');
   document.getElementById('type-answer-input').value = '';
+  lastTypedAnswer = null;
   document.getElementById('next-btn').disabled = true;
   if (answerMode === 'type') {
     document.getElementById('reveal-row').style.display = 'none';
@@ -702,6 +774,7 @@ function submitTypedAnswer() {
   const item = quiz[order[idx]];
   const userAnswer = document.getElementById('type-answer-input').value.trim();
   const isMatch = userAnswer.length > 0 && userAnswer === item.answer.trim();
+  lastTypedAnswer = userAnswer;
   document.getElementById('a-block').style.display = 'block';
   document.getElementById('judge-row').style.display = 'flex';
   document.getElementById('type-answer-row').style.display = 'none';
@@ -734,13 +807,65 @@ document.getElementById('type-answer-input').addEventListener('focus', () => {
 
 document.getElementById('mark-correct').addEventListener('click', () => {
   correct++;
+  recordAnswerHistory(true);
   finishJudge();
 });
 document.getElementById('mark-wrong').addEventListener('click', () => {
   wrong++;
   wrongIndices.push(order[idx]);
+  recordAnswerHistory(false);
   finishJudge();
 });
+function recordAnswerHistory(isCorrect) {
+  const item = quiz[order[idx]];
+  answerHistory.push({
+    question: item.question,
+    correctAnswer: item.answer,
+    userAnswer: lastTypedAnswer,
+    isCorrect
+  });
+}
+
+function renderAnswerReview() {
+  const section = document.getElementById('answer-review-section');
+  const list = document.getElementById('answer-review-list');
+  list.innerHTML = '';
+  if (answerHistory.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+  answerHistory.forEach((h, i) => {
+    const item = document.createElement('div');
+    item.className = 'review-item ' + (h.isCorrect ? 'correct' : 'wrong');
+
+    const qDiv = document.createElement('div');
+    qDiv.className = 'review-q';
+    qDiv.textContent = (i + 1) + '. ' + h.question;
+    item.appendChild(qDiv);
+
+    const row = document.createElement('div');
+    row.className = 'review-a-row';
+    const label = document.createElement('span');
+    label.className = 'review-label';
+    label.textContent = h.isCorrect ? '✓ 正解' : '✗ 不正解';
+    const answerSpan = document.createElement('span');
+    answerSpan.className = 'review-answer';
+    answerSpan.textContent = '正答: ' + h.correctAnswer;
+    row.appendChild(label);
+    row.appendChild(answerSpan);
+    item.appendChild(row);
+
+    if (h.userAnswer !== null && h.userAnswer !== undefined) {
+      const userDiv = document.createElement('div');
+      userDiv.className = 'review-user-answer';
+      userDiv.textContent = 'あなたの入力: ' + (h.userAnswer || '（未入力）');
+      item.appendChild(userDiv);
+    }
+
+    list.appendChild(item);
+  });
+}
 function finishJudge() {
   document.getElementById('judge-row').style.display = 'none';
   document.getElementById('correct-count').textContent = correct;
@@ -772,6 +897,7 @@ document.getElementById('next-btn').addEventListener('click', () => {
         recordQuizResult(currentQuizId, '', correct, order.length);
       }
     }
+    renderAnswerReview();
     clearProgress();
   } else {
     renderQuestion();
@@ -785,11 +911,45 @@ document.getElementById('review-btn').addEventListener('click', () => {
   correct = 0;
   wrong = 0;
   wrongIndices = [];
+  answerHistory = [];
   mode = 'review';
   resultScreen.style.display = 'none';
   quizScreen.style.display = 'block';
   renderQuestion();
   saveProgress();
+});
+
+document.getElementById('question-list-btn').addEventListener('click', () => {
+  const body = document.getElementById('question-list-body');
+  body.innerHTML = '';
+  document.getElementById('question-list-count').textContent = quiz.length;
+  quiz.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'qlist-item';
+
+    const qDiv = document.createElement('div');
+    qDiv.className = 'qlist-q';
+    qDiv.textContent = (i + 1) + '. ' + item.question;
+
+    const aDiv = document.createElement('div');
+    aDiv.className = 'qlist-a';
+    aDiv.textContent = item.answer;
+
+    const hintDiv = document.createElement('div');
+    hintDiv.className = 'qlist-hint';
+    hintDiv.textContent = 'タップして答えを表示/非表示';
+
+    row.appendChild(qDiv);
+    row.appendChild(aDiv);
+    row.appendChild(hintDiv);
+    row.addEventListener('click', () => aDiv.classList.toggle('revealed'));
+    body.appendChild(row);
+  });
+  document.getElementById('question-list-modal').style.display = 'flex';
+});
+
+document.getElementById('question-list-close').addEventListener('click', () => {
+  document.getElementById('question-list-modal').style.display = 'none';
 });
 
 document.getElementById('back-to-setup').addEventListener('click', () => {
@@ -806,6 +966,7 @@ document.getElementById('edit-again-btn').addEventListener('click', () => {
 document.getElementById('restart-btn').addEventListener('click', () => {
   idx = 0; correct = 0; wrong = 0;
   wrongIndices = [];
+  answerHistory = [];
   mode = 'normal';
   order = quiz.map((_, i) => i);
   if (shuffleOn) {

@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS progress (
   quiz_id TEXT NOT NULL,
   device_id TEXT NOT NULL,
   ip TEXT,
+  country TEXT,  -- Cloudflare request.cf.country（国コード。管理画面専用、一般ページには非表示）
+  region TEXT,   -- Cloudflare request.cf.region
+  city TEXT,     -- Cloudflare request.cf.city（取得できない場合はNULL）
   idx INTEGER NOT NULL DEFAULT 0,
   order_json TEXT NOT NULL DEFAULT '[]',          -- JSON配列文字列（回答順のインデックス）
   correct INTEGER NOT NULL DEFAULT 0,
@@ -30,3 +33,9 @@ CREATE TABLE IF NOT EXISTS progress (
 );
 
 CREATE INDEX IF NOT EXISTS idx_progress_updated_at ON progress(updated_at);
+
+CREATE TABLE IF NOT EXISTS ip_nicknames (
+  ip TEXT PRIMARY KEY,
+  nickname TEXT,
+  updated_at TEXT NOT NULL
+);

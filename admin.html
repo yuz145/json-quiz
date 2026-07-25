@@ -192,6 +192,13 @@
       <div id="quiz-list-empty" style="font-size:13px; color:var(--muted);">まだクイズセットがありません。</div>
     </div>
 
+    <h2>参加者管理（ニックネーム設定）</h2>
+    <div class="card" id="nickname-card">
+      <p style="font-size:13px; color:var(--muted); margin-top:0;">接続IPごとにニックネームを設定できます。設定すると、下のログ一覧でIPアドレスと併せて表示されます。</p>
+      <div id="nickname-list"></div>
+      <div id="nickname-empty" style="font-size:13px; color:var(--muted); display:none;">まだ記録された接続IPがありません。</div>
+    </div>
+
     <h2>ユーザー解答・アクセス状況（IP・進捗ログ）</h2>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
       <div class="row" style="margin-top:0;">
@@ -283,6 +290,7 @@ async function login() {
     loginScreen.style.display = 'none';
     adminScreen.style.display = 'block';
     await loadQuizList();
+    await loadNicknames();
     await loadUserLogs();
   } catch (e) {
     loginError.textContent = '認証通信エラー: ' + e.message;
@@ -294,6 +302,157 @@ async function login() {
 
 let currentLogs = [];
 let activeLogMode = 'ip'; // 'ip' | 'all'
+let ipNicknames = {}; // ip -> nickname（未設定は含まれない）
+
+async function loadNicknames() {
+  try {
+    const res = await fetch('/api/nicknames', { headers: authHeaders() });
+    if (!res.ok) return;
+    const list = await res.json();
+    ipNicknames = {};
+    (Array.isArray(list) ? list : []).forEach(row => {
+      if (row.nickname) ipNicknames[row.ip] = row.nickname;
+    });
+    renderNicknameList(list);
+  } catch (e) {
+    // ニックネーム一覧が取れなくても致命的ではない
+  }
+}
+
+function renderNicknameList(list) {
+  const container = document.getElementById('nickname-list');
+  const emptyEl = document.getElementById('nickname-empty');
+  container.innerHTML = '';
+  if (!Array.isArray(list) || list.length === 0) {
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  list.forEach(row => {
+    const wrapper = document.createElement('div');
+    wrapper.style.borderBottom = '1px solid var(--border)';
+
+    const item = document.createElement('div');
+    item.className = 'quiz-item';
+    item.style.borderBottom = 'none';
+
+    const ipDiv = document.createElement('div');
+    ipDiv.innerHTML = '<code>' + escapeHtml(row.ip) + '</code>';
+
+    const controls = document.createElement('div');
+    controls.className = 'row';
+    controls.style.marginTop = '0';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = row.nickname || '';
+    input.placeholder = 'ニックネーム未設定';
+    input.style.cssText = 'width:180px; margin-bottom:0;';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = '保存';
+    saveBtn.style.cssText = 'padding:8px 14px; font-size:13px; min-height:36px;';
+    saveBtn.addEventListener('click', () => saveNickname(row.ip, input.value, saveBtn));
+
+    const detailBtn = document.createElement('button');
+    detailBtn.textContent = '詳細を見る';
+    detailBtn.style.cssText = 'padding:8px 14px; font-size:13px; min-height:36px;';
+
+    controls.appendChild(input);
+    controls.appendChild(saveBtn);
+    controls.appendChild(detailBtn);
+    item.appendChild(ipDiv);
+    item.appendChild(controls);
+
+    const detailPanel = document.createElement('div');
+    detailPanel.style.cssText = 'display:none; padding:0 0 14px; font-size:13px;';
+    detailPanel.innerHTML =
+      '<div style="background:#f8f9fa; border-radius:8px; padding:10px 12px; margin-top:4px;">' +
+        '<div style="margin-bottom:8px;"><strong>位置情報（接続時点・Cloudflare判定）</strong><br>' +
+        '国: ' + escapeHtml(row.country || '不明') + ' ／ 地域: ' + escapeHtml(row.region || '不明') + ' ／ 都市: ' + escapeHtml(row.city || '不明') +
+        '</div>' +
+        '<div>' +
+          '<button class="rdns-btn" style="padding:6px 12px; font-size:12px; min-height:32px;">🔍 逆引き(rDNS)を実行</button>' +
+          '<span class="rdns-result" style="margin-left:8px; color:var(--muted);"></span>' +
+        '</div>' +
+      '</div>';
+
+    detailBtn.addEventListener('click', () => {
+      const isHidden = detailPanel.style.display === 'none';
+      detailPanel.style.display = isHidden ? 'block' : 'none';
+      detailBtn.textContent = isHidden ? '詳細を閉じる' : '詳細を見る';
+    });
+
+    const rdnsBtn = detailPanel.querySelector('.rdns-btn');
+    const rdnsResult = detailPanel.querySelector('.rdns-result');
+    rdnsBtn.addEventListener('click', () => lookupRdns(row.ip, rdnsBtn, rdnsResult));
+
+    wrapper.appendChild(item);
+    wrapper.appendChild(detailPanel);
+    container.appendChild(wrapper);
+  });
+}
+
+async function lookupRdns(ip, btn, resultEl) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '問い合わせ中...';
+  resultEl.textContent = '';
+  try {
+    const res = await fetch('/api/admin/rdns?ip=' + encodeURIComponent(ip), { headers: authHeaders() });
+    if (res.status === 401) {
+      resultEl.textContent = 'パスワードが違うため取得できませんでした。';
+      return;
+    }
+    const data = await res.json();
+    if (data.hostname) {
+      resultEl.textContent = data.hostname;
+      resultEl.style.color = 'var(--accent-dark)';
+    } else {
+      resultEl.textContent = data.error || '取得できませんでした。';
+      resultEl.style.color = 'var(--muted)';
+    }
+  } catch (e) {
+    resultEl.textContent = '通信エラー: ' + e.message;
+    resultEl.style.color = 'var(--danger)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+async function saveNickname(ip, nickname, btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try {
+    const res = await fetch('/api/nicknames', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ ip, nickname: nickname.trim() }),
+    });
+    if (res.status === 401) {
+      alert('パスワードが違うため保存できませんでした。');
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const trimmed = nickname.trim();
+    if (trimmed) {
+      ipNicknames[ip] = trimmed;
+    } else {
+      delete ipNicknames[ip];
+    }
+    renderLogs();
+    btn.textContent = '保存済み ✓';
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  } catch (e) {
+    alert('ニックネームの保存に失敗しました:\n' + e.message);
+    btn.textContent = original;
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 document.getElementById('refresh-logs-btn').addEventListener('click', loadUserLogs);
 document.getElementById('clear-logs-btn').addEventListener('click', clearAllLogs);
@@ -405,12 +564,17 @@ function renderIpGroupedLogs(container) {
     const devices = [...new Set(ipLogs.map(l => l.deviceId))];
     const latestDate = ipLogs[0] && ipLogs[0].updatedAt ? new Date(ipLogs[0].updatedAt).toLocaleString('ja-JP') : '-';
 
+    const nickname = ipNicknames[ip];
+    const nicknameHtml = nickname
+      ? ' <span style="color:var(--accent-dark); font-weight:700;">（' + escapeHtml(nickname) + '）</span>'
+      : '';
+
     const card = document.createElement('div');
     card.className = 'ip-group-card';
     card.innerHTML =
       '<div class="ip-group-header">' +
         '<div>' +
-          '<div class="ip-title">🌐 接続IP: <code>' + escapeHtml(ip) + '</code></div>' +
+          '<div class="ip-title">🌐 接続IP: <code>' + escapeHtml(ip) + '</code>' + nicknameHtml + '</div>' +
           '<div style="font-size:12px; color:var(--muted); margin-top:4px;">端末ID: ' + escapeHtml(devices.map(d => d.slice(0, 12) + '...').join(', ')) + '</div>' +
         '</div>' +
         '<div style="font-size:12px; color:var(--muted); text-align:right;">最終アクセス: ' + escapeHtml(latestDate) + '</div>' +
@@ -489,10 +653,13 @@ function renderAllLogsTable(container) {
       ? log.correct + ' / ' + log.totalCount + ' 正解 (' + Math.round((log.correct / (log.totalCount || 1)) * 100) + '%)'
       : (log.correct + '正解 / ' + log.wrong + '不正解');
 
+    const nickname = ipNicknames[log.ip];
+    const nicknameHtml = nickname ? '<br><span style="font-size:11px; color:var(--accent-dark); font-weight:700;">' + escapeHtml(nickname) + '</span>' : '';
+
     tr.innerHTML =
       '<td>' + escapeHtml(dateStr) + '</td>' +
       '<td><strong>' + escapeHtml(log.quizTitle) + '</strong> <span style="font-size:11px; color:var(--muted);">[' + escapeHtml(log.category) + ']</span></td>' +
-      '<td><code>' + escapeHtml(log.ip) + '</code></td>' +
+      '<td><code>' + escapeHtml(log.ip) + '</code>' + nicknameHtml + '</td>' +
       '<td><span style="font-size:11px; color:var(--muted); font-family:monospace;">' + escapeHtml(log.deviceId.slice(0, 16)) + '...</span></td>' +
       '<td>' + escapeHtml(scoreStr) + '</td>' +
       '<td>' + statusBadge + '</td>';
@@ -695,6 +862,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         loginScreen.style.display = 'none';
         adminScreen.style.display = 'block';
         await loadQuizList();
+        await loadNicknames();
         await loadUserLogs();
       } else {
         sessionStorage.removeItem('quizAdminPassword');

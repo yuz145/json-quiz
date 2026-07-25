@@ -10,8 +10,12 @@
 - 名前の入力は不要。初回アクセス時にブラウザの`localStorage`へランダムなデバイスIDを自動生成して保存し、以後はそれをキーに進捗をD1に保存
 - パスワード保護された管理画面 `/admin.html` からクイズセット（question/answerの配列＋カテゴリ）を追加・編集・削除
 - 管理画面にて各ユーザーの接続IP・端末識別ID・クイズごとの解答進捗/スコア/最終アクセス日時を一覧確認可能（`GET /api/admin/progress`）
-- シャッフル出題および回答形式切り替え（「答えを見る」/「文字入力」）のトグルボタンを大型化＆ON/OFFで明確に色付け
-- スマートフォン表示の全画面レスポンシブ最適化（適切なタップエリア、フォームズーム防止など）
+- 管理画面の「参加者管理」で接続IPごとにニックネームを設定可能。設定すると解答ログにニックネームが併記される。「詳細を見る」を開くと、その回答者の接続時の位置情報（国・地域・都市）と、ボタン押下時にオンデマンドで取得する逆引きDNS（rDNS）結果を確認できる（すべて管理画面専用。一般ユーザー向けページには一切表示しない）
+- シャッフル出題および回答形式切り替え（「答えを見る」/「文字入力」）のトグルボタンを大型化＆ON/OFFで明確に色付け。設定はブラウザに保存され次回アクセス時も引き継がれる
+- 入力して採点モードでは、完全一致の自動判定を色付きバッジ（緑=一致／赤=不一致）で分かりやすく表示
+- 結果画面に解答した全問題の一覧（問題文・正答・自分の解答・正解/不正解を色分け表示）を表示
+- クイズの実行中いつでも「問題一覧を見る」から全問題（question/answer）を確認可能。答えはタップするまで非表示（ネタバレ防止）
+- スマートフォン表示の全画面レスポンシブ最適化（適切なタップエリア、フォームズーム防止、iPhoneのDynamic Island/ノッチ対応など）
 - 間違えた問題だけをもう一度出題する「復習モード」
 
 ## 使い方
@@ -23,9 +27,9 @@
    - 「クイズセットを選ぶ」一覧からカテゴリの下に並んだクイズセットを選ぶ（常に最初から開始。各セットの達成度バッジ・全体達成度カードが表示されます）
    - 前回の途中の続きから再開したい場合は、画面上部の「続きから再開する」ボタンを押す
 4. 回答モードが「自己採点」なら「答えを表示」→「正解した／不正解だった」、「入力して採点」なら答えを入力して「回答する」（完全一致で自動判定を表示）→「正解した／不正解だった」で最終判定して次の問題へ進む
-5. 最後まで進むと結果画面が表示され、間違えた問題があれば「間違えた問題を復習する」から復習モードに入れる。クイズセットから開始した場合は「このクイズのランキングを見る」からそのクイズの結果一覧に飛べる
+5. 最後まで進むと結果画面が表示され、解答した全問題の一覧（正解/不正解を色分け）を確認できる。間違えた問題があれば「間違えた問題を復習する」から復習モードに入れる
 
-## JSONのフォーマット（貼り付け・ファイル読み込み・管理画面共通）
+## JSONのフォーマット（管理画面での登録用）
 
 `question`（問題文）と `answer`（答え）を持つオブジェクトの配列です。両方とも文字列である必要があります。
 
@@ -55,10 +59,13 @@ functions/
                               PUT  /api/quiz/:id            クイズセット更新（管理者のみ）
                               DELETE /api/quiz/:id          クイズセット削除（管理者のみ。紐づく進捗も削除）
     progress/[deviceId].js   GET  /api/progress/:deviceId  進捗取得
-                              POST /api/progress/:deviceId  進捗・接続IP保存（1週間相当のTTLを疑似実装）
+                              POST /api/progress/:deviceId  進捗・接続IP・位置情報保存（1週間相当のTTLを疑似実装）
+    nicknames.js              GET  /api/nicknames           管理者専用: 記録済みIP一覧＋ニックネーム＋最新の位置情報取得
+                              POST /api/nicknames           管理者専用: IPにニックネームを設定（空文字で解除）
     admin/auth.js            POST /api/admin/auth         管理者パスワード事前検証
     admin/progress.js        GET  /api/admin/progress     管理者専用: ユーザー解答・IPアクセスログ一覧取得
                               DELETE /api/admin/progress  管理者専用: 全アクセス・解答ログを一括全削除
+    admin/rdns.js             GET  /api/admin/rdns?ip=xxx  管理者専用: 外部DNS-over-HTTPS APIでIPアドレスを逆引き（オンデマンド）
 ```
 
 このプロジェクトはKVを使用せず、Cloudflare D1（SQLiteベースのマネージドDB）にデータを保存します。D1バインディング（`DB`）は`wrangler.toml`に定義していますが、Gitに接続した本番のPagesプロジェクトではCloudflareダッシュボードのプロジェクト設定画面（Settings → Functions → D1 database bindings）側の設定が優先されます。環境変数（`ADMIN_PASSWORD`）もダッシュボード（Settings → Environment variables）で設定します。
@@ -70,12 +77,15 @@ functions/
 | テーブル | 内容 |
 | --- | --- |
 | `quizzes` | クイズセット本体。`id`（主キー）, `title`, `category`, `questions`（JSON文字列）, `created_at`, `updated_at` |
-| `progress` | デバイスごとの進捗。`(quiz_id, device_id)` の複合主キー。`ip`, `idx`, `order_json`, `correct`, `wrong`, `wrong_indices_json`, `mode`, `answer_mode`, `shuffle_on`, `completed`, `updated_at` |
+| `progress` | デバイスごとの進捗。`(quiz_id, device_id)` の複合主キー。`ip`, `country`, `region`, `city`, `idx`, `order_json`, `correct`, `wrong`, `wrong_indices_json`, `mode`, `answer_mode`, `shuffle_on`, `completed`, `updated_at` |
+| `ip_nicknames` | IPアドレスに管理者が付けたニックネーム。`ip`（主キー）, `nickname`, `updated_at` |
 
 - `category` を省略してクイズセットを作成・更新した場合は `未分類` として扱われます
 - クイズセット一覧の「問題数」は保存された値ではなく、取得時に `json_array_length(questions)` で都度計算しています
 - クイズセットを削除すると、そのクイズに紐づく `progress` 行も併せて削除されます（DBのFOREIGN KEY制約に頼らず、削除処理内で明示的に行っています）
 - KVの `expirationTtl` に相当する仕組みがD1には無いため、`POST /api/progress/:deviceId` が呼ばれるたびに「1週間以上 `updated_at` が更新されていない `progress` 行」を削除する簡易的なクリーンアップを実行しています（`functions/_utils.js` の `cleanupOldProgress`）。アクセスが全く無いクイズの古い進捗はこの方式では削除されませんが、実用上は許容範囲としています
+- `country` / `region` / `city` はCloudflareエッジが自動的に付与する `request.cf` から取得したもので、外部APIへの問い合わせは発生しません（ローカル開発の `wrangler pages dev` でも疑似的な値が入ります）。これらの列と `ip_nicknames` テーブルの内容は管理者専用API（`/api/nicknames`, `/api/admin/*`）でのみ取得可能で、`/api/progress/:deviceId` や `/api/quiz*` など一般ユーザー向けのレスポンスには含まれません
+- `schema.sql` は `CREATE TABLE IF NOT EXISTS` ベースなので、新規にテーブル列を追加した場合、**既存の本番D1には自動反映されません**。列追加のたびに `wrangler d1 execute <DB名> --remote --command="ALTER TABLE ... ADD COLUMN ..."` を手動で実行してから新しいコードをデプロイしてください（実行を忘れると該当列を使うAPIが失敗します）
 
 ## ローカルでの動作確認
 
@@ -131,6 +141,6 @@ GitHub PagesはFunctions/D1のようなサーバー機能を持たない静的�
 
 ## データの保存について
 
-- クイズセットから開始した場合の進捗・成績は、ブラウザの`localStorage`に自動生成されたデバイスIDとクイズセットIDをキーとしてCloudflare D1に保存されます（`localStorage`にも同時に保存され、同じブラウザでのリロード時はそちらを優先して即座に再開できます）。D1側の進捗は1週間操作がないと自動的に削除されます（`POST /api/progress/:deviceId` 呼び出し時のクリーンアップ処理による）
-- テキスト貼り付け・ファイル読み込みで開始した場合は、進捗は各ブラウザの `localStorage` にのみ保存されます（サーバーには送信されません）
+- クイズセットの進捗・成績は、ブラウザの`localStorage`に自動生成されたデバイスIDとクイズセットIDをキーとしてCloudflare D1に保存されます（`localStorage`にも同時に保存され、同じブラウザでのリロード時はそちらを優先して即座に再開できます）。D1側の進捗は1週間操作がないと自動的に削除されます（`POST /api/progress/:deviceId` 呼び出し時のクリーンアップ処理による）
 - デバイスIDは端末・ブラウザごとに別々に発行されるため、同じ人でも別のブラウザやシークレットモード、別の端末からは別デバイス（＝新規参加者）として扱われます
+- 接続IP・位置情報（国/地域/都市）・ニックネーム・逆引きDNS結果は、パスワード保護された管理画面（`/admin.html`）でのみ確認できます。`index.html` などの一般ユーザー向けページやAPIレスポンスには含まれません

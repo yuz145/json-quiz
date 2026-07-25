@@ -56,6 +56,13 @@ export const onRequestPost = safe(async ({ params, request, env }) => {
     || request.headers.get('x-real-ip')
     || 'direct';
 
+  // request.cf は本番のCloudflareエッジでのみ利用可能（ローカル開発では未定義）。
+  // 管理画面専用の情報なので、一般ユーザー向けのレスポンスには含めない。
+  const cf = request.cf || {};
+  const country = typeof cf.country === 'string' ? cf.country : null;
+  const region = typeof cf.region === 'string' ? cf.region : null;
+  const city = typeof cf.city === 'string' ? cf.city : null;
+
   const now = new Date().toISOString();
   const idx = Number.isInteger(body.idx) ? body.idx : 0;
   const order = Array.isArray(body.order) ? body.order : [];
@@ -68,10 +75,13 @@ export const onRequestPost = safe(async ({ params, request, env }) => {
   const completed = body.completed ? 1 : 0;
 
   await env.DB.prepare(
-    `INSERT INTO progress (quiz_id, device_id, ip, idx, order_json, correct, wrong, wrong_indices_json, mode, answer_mode, shuffle_on, completed, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO progress (quiz_id, device_id, ip, country, region, city, idx, order_json, correct, wrong, wrong_indices_json, mode, answer_mode, shuffle_on, completed, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(quiz_id, device_id) DO UPDATE SET
        ip = excluded.ip,
+       country = excluded.country,
+       region = excluded.region,
+       city = excluded.city,
        idx = excluded.idx,
        order_json = excluded.order_json,
        correct = excluded.correct,
@@ -83,7 +93,7 @@ export const onRequestPost = safe(async ({ params, request, env }) => {
        completed = excluded.completed,
        updated_at = excluded.updated_at`
   ).bind(
-    quizId, deviceId, ip, idx, JSON.stringify(order), correct, wrong,
+    quizId, deviceId, ip, country, region, city, idx, JSON.stringify(order), correct, wrong,
     JSON.stringify(wrongIndices), mode, answerMode, shuffleOn, completed, now
   ).run();
 
