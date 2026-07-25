@@ -118,7 +118,7 @@
 
   #global-settings-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: nowrap; }
   .toggle-btn {
-    flex: 1 1 50%;
+    flex: 1 1 0;
     font-size: 15px;
     font-weight: 700;
     padding: 14px 8px;
@@ -144,6 +144,11 @@
     background: #e9ecef;
     border-color: #ced4da;
     color: #495057;
+  }
+  .toggle-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
   }
   #quiz-screen { display: none; }
   .progress-bar-outer {
@@ -399,7 +404,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-2';
+const APP_VERSION = '2026-07-25-3';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -461,8 +466,9 @@ function updateAnswerModeToggle() {
 
 function updateAutoCorrectToggle() {
   const el = document.getElementById('auto-correct-toggle');
-  // 「文字入力」モードのときだけ意味を持つ設定なので、自己採点モードでは非表示にする
-  el.style.display = answerMode === 'type' ? 'inline-flex' : 'none';
+  // 「文字入力」モードのときだけ意味を持つ設定。非表示にするとボタンの数が変わりレイアウトが
+  // ガタつくため、「答えを見る」モードでは非表示ではなくグレーアウト(disabled)にするだけにする
+  el.disabled = answerMode !== 'type';
   setToggleButton(el, autoCorrectOnMatch, '完全一致で自動正解: ' + (autoCorrectOnMatch ? 'ON' : 'OFF'));
 }
 
