@@ -247,6 +247,8 @@
   .modal-title { font-size: 16px; font-weight: 700; }
   .qlist-item { border-bottom: 1px solid var(--border); padding: 12px 0; cursor: pointer; }
   .qlist-item:last-child { border-bottom: none; }
+  .qlist-item.qlist-current { background: var(--accent-light); border-radius: 8px; padding: 12px; margin: 0 -12px; border-bottom-color: transparent; }
+  .qlist-current-badge { display: inline-block; margin-left: 6px; padding: 1px 7px; font-size: 11px; font-weight: 700; border-radius: 4px; background: var(--accent); color: #fff; vertical-align: middle; }
   .qlist-q { font-size: 14px; font-weight: 600; word-break: break-word; }
   .qlist-a { font-size: 13px; color: var(--accent-dark); font-weight: bold; margin-top: 8px; display: none; word-break: break-word; }
   .qlist-a.revealed { display: block; }
@@ -415,7 +417,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-13';
+const APP_VERSION = '2026-07-25-14';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -1075,13 +1077,23 @@ document.getElementById('question-list-btn').addEventListener('click', () => {
   const body = document.getElementById('question-list-body');
   body.innerHTML = '';
   document.getElementById('question-list-count').textContent = quiz.length;
+  const currentQuestionIndex = order[idx];
+  let currentRow = null;
   quiz.forEach((item, i) => {
     const row = document.createElement('div');
     row.className = 'qlist-item';
+    const isCurrent = i === currentQuestionIndex;
+    if (isCurrent) row.classList.add('qlist-current');
 
     const qDiv = document.createElement('div');
     qDiv.className = 'qlist-q';
     qDiv.textContent = (i + 1) + '. ' + item.question;
+    if (isCurrent) {
+      const badge = document.createElement('span');
+      badge.className = 'qlist-current-badge';
+      badge.textContent = '今の問題';
+      qDiv.appendChild(badge);
+    }
 
     const aDiv = document.createElement('div');
     aDiv.className = 'qlist-a';
@@ -1096,8 +1108,12 @@ document.getElementById('question-list-btn').addEventListener('click', () => {
     row.appendChild(hintDiv);
     row.addEventListener('click', () => aDiv.classList.toggle('revealed'));
     body.appendChild(row);
+    if (isCurrent) currentRow = row;
   });
   document.getElementById('question-list-modal').style.display = 'flex';
+  if (currentRow) {
+    currentRow.scrollIntoView({ block: 'center' });
+  }
 });
 
 document.getElementById('question-list-close').addEventListener('click', () => {
