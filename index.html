@@ -353,8 +353,9 @@
       <span id="q-counter">1 / 10問</span>
       <span class="score">正解 <span id="correct-count">0</span> / 不正解 <span id="wrong-count">0</span></span>
     </div>
-    <div class="row" style="justify-content:flex-end; margin:0 0 10px;">
-      <button id="question-list-btn" class="btn-subtle" style="font-size:12px; padding:6px 10px; min-height:32px;">📋 問題一覧を見る</button>
+    <div class="row" style="justify-content:space-between; align-items:center; margin:0 0 10px;">
+      <span id="quiz-title-label" style="display:none; min-width:0; flex:1 1 auto; font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+      <button id="question-list-btn" class="btn-subtle" style="font-size:12px; padding:6px 10px; min-height:32px; flex-shrink:0;">📋 問題一覧を見る</button>
     </div>
     <div class="card">
       <div class="question-area" id="question-area">
@@ -417,7 +418,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-25-14';
+const APP_VERSION = '2026-07-29-1';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -454,6 +455,7 @@ let awaitingJudgeConfirmation = false; // 「正解した/不正解だった」�
 let mode = 'normal'; // 'normal' | 'review'
 let answerMode = 'type'; // 'self' | 'type'
 let currentQuizId = null;   // KV上のクイズID（貼り付け/ファイル読み込みの場合はnull）
+let currentQuizTitle = null; // 出題中のクイズセット名（問題一覧ボタン付近に表示する）
 
 const setupScreen = document.getElementById('setup-screen');
 const quizScreen = document.getElementById('quiz-screen');
@@ -533,7 +535,7 @@ function saveProgress() {
   // サーバーへの同期とは切り離し、ローカルの「続きから再開する」用にはこれまで通り毎回保存する
   const data = {
     quiz, order, idx, correct, wrong, shuffleOn, wrongIndices, mode, answerMode,
-    currentQuizId,
+    currentQuizId, currentQuizTitle,
     savedAt: Date.now()
   };
   try {
@@ -631,6 +633,7 @@ function checkResume() {
     mode = data.mode || 'normal';
     answerMode = data.answerMode || 'self';
     currentQuizId = data.currentQuizId || null;
+    currentQuizTitle = data.currentQuizTitle || null;
     pendingSyncCount = 0;
     updateShuffleToggle();
     updateAnswerModeToggle();
@@ -739,6 +742,7 @@ async function openQuizSet(id, title) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     currentQuizId = data.id;
+    currentQuizTitle = data.title || title || null;
 
     // 「続きから再開する」ボタン以外で開いた場合は、途中進捗をクリアして「最初から」始める
     clearProgress();
@@ -788,6 +792,13 @@ function startQuizFromArray(data) {
 
 function renderQuestion() {
   awaitingJudgeConfirmation = false;
+  const titleLabel = document.getElementById('quiz-title-label');
+  if (currentQuizTitle) {
+    titleLabel.textContent = '📚 ' + currentQuizTitle;
+    titleLabel.style.display = 'inline';
+  } else {
+    titleLabel.style.display = 'none';
+  }
   const item = quiz[order[idx]];
   document.getElementById('q-text').textContent = item.question;
   document.getElementById('a-text').textContent = item.answer;
