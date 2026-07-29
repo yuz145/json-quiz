@@ -19,7 +19,7 @@
 - スマートフォン表示の全画面レスポンシブ最適化（適切なタップエリア、フォームズーム防止、iPhoneのDynamic Island/ノッチ対応など）
 - 間違えた問題だけをもう一度出題する「復習モード」
 - サーバーへの進捗保存は「3問解答するごと」「タブを閉じる/切り替えるなどページを離れる瞬間（`navigator.sendBeacon`）」「クイズ終了時」のハイブリッド方式。毎問ごとの書き込みを避けつつ、途中離脱時も直近の状態を取りこぼさない
-- トップページ右上の🔔ボタンから「お知らせ」を確認可能（`GET /api/announcement`）。管理画面の「お知らせ編集」セクションから内容を更新でき（`PUT /api/announcement`、管理者のみ）、内容が更新された（かつ一度も開いていない）場合のみ🔔に赤い未読ドットが表示される。一度でも開けば既読になり、次に内容が更新されるまでドットは出ない
+- トップページ右上の🔔ボタンから「お知らせ」を確認可能（`GET /api/announcement`）。管理画面の「お知らせ編集」セクションから内容を更新でき（`PUT /api/announcement`、管理者のみ）、内容が更新された（かつ一度も開いていない）場合のみ🔔に赤い未読ドットが表示される。一度でも開けば既読になり、次に内容が更新されるまでドットは出ない。管理画面の「大事なお知らせ」トグルをONにすると、トップページを開いた瞬間に自動でお知らせモーダルが表示される。「赤点をつける」トグルで、その更新が🔔の未読ドット表示対象かどうかを個別に制御できる（両トグルは独立）
 
 ## 使い方
 
@@ -99,7 +99,7 @@ functions/
 | `quizzes` | クイズセット本体。`id`（主キー）, `title`, `category`, `questions`（JSON文字列）, `created_at`, `updated_at` |
 | `progress` | デバイスごとの進捗。`(quiz_id, device_id)` の複合主キー。`ip`, `country`, `region`, `city`, `idx`, `order_json`, `correct`, `best_correct`, `wrong`, `wrong_indices_json`, `mode`, `answer_mode`, `shuffle_on`, `completed`, `updated_at` |
 | `ip_nicknames` | IPアドレスに管理者が付けたニックネーム。`ip`（主キー）, `nickname`, `updated_at` |
-| `announcement` | トップページの🔔から見る「お知らせ」。常に1行のみ（`id`は1固定）。`content`, `updated_at` |
+| `announcement` | トップページの🔔から見る「お知らせ」。常に1行のみ（`id`は1固定）。`content`, `important`（開いた瞬間に自動表示するか）, `show_dot`（未読ドットを出すか）, `updated_at` |
 
 - `category` を省略してクイズセットを作成・更新した場合は `未分類` として扱われます
 - クイズセット一覧の「問題数」は保存された値ではなく、取得時に `json_array_length(questions)` で都度計算しています

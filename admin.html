@@ -221,6 +221,10 @@
         <p style="font-size:13px; color:var(--muted); margin-top:0;">ここに書いた内容が、クイズトップページ右上の🔔ボタンから見られる「お知らせ」として全ユーザーに表示されます。</p>
         <label for="announcement-input">お知らせ本文</label>
         <textarea id="announcement-input" style="font-family:inherit; height:140px;" placeholder="例: 2026/07/29 復習モードを追加しました。"></textarea>
+        <div class="row" style="margin-bottom:12px;">
+          <button id="announcement-important-toggle" class="view-mode-btn">🚨 大事なお知らせ（開いた瞬間に表示）</button>
+          <button id="announcement-dot-toggle" class="view-mode-btn active">🔴 赤点をつける（更新時に未読表示）</button>
+        </div>
         <div class="row">
           <button class="primary" id="announcement-save-btn">保存する</button>
         </div>
@@ -344,6 +348,23 @@ async function login() {
   }
 }
 
+let announcementImportant = false;
+let announcementShowDot = true;
+
+function updateAnnouncementToggleButtons() {
+  document.getElementById('announcement-important-toggle').classList.toggle('active', announcementImportant);
+  document.getElementById('announcement-dot-toggle').classList.toggle('active', announcementShowDot);
+}
+
+document.getElementById('announcement-important-toggle').addEventListener('click', () => {
+  announcementImportant = !announcementImportant;
+  updateAnnouncementToggleButtons();
+});
+document.getElementById('announcement-dot-toggle').addEventListener('click', () => {
+  announcementShowDot = !announcementShowDot;
+  updateAnnouncementToggleButtons();
+});
+
 async function loadAnnouncement() {
   const errorEl = document.getElementById('announcement-error');
   const statusEl = document.getElementById('announcement-status');
@@ -354,6 +375,9 @@ async function loadAnnouncement() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     document.getElementById('announcement-input').value = data.content || '';
+    announcementImportant = !!data.important;
+    announcementShowDot = data.showDot !== false;
+    updateAnnouncementToggleButtons();
   } catch (e) {
     errorEl.textContent = 'お知らせの取得に失敗しました:\n' + e.message;
   }
@@ -371,7 +395,7 @@ document.getElementById('announcement-save-btn').addEventListener('click', async
     const res = await fetch('/api/announcement', {
       method: 'PUT',
       headers: authHeaders(),
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, important: announcementImportant, showDot: announcementShowDot }),
     });
     if (res.status === 401) {
       errorEl.textContent = 'パスワードが違うため保存できませんでした。';
