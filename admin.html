@@ -166,6 +166,27 @@
     border-color: var(--accent-dark);
     font-weight: bold;
   }
+
+  .admin-section { margin: 0; }
+  .admin-section > summary {
+    cursor: pointer;
+    font-size: 17px;
+    font-weight: 700;
+    margin: 28px 0 12px;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .admin-section > summary::-webkit-details-marker { display: none; }
+  .admin-section > summary::before {
+    content: '▶';
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .admin-section[open] > summary::before { content: '▼'; }
+  .admin-section > summary:first-child { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -186,54 +207,76 @@
     <h1>クイズ管理画面</h1>
     <p style="font-size:13px;"><a class="back-link" href="index.html">← クイズに戻る</a></p>
 
-    <h2>登録済みクイズセット</h2>
-    <div class="card" id="quiz-list-card">
-      <div id="quiz-list"></div>
-      <div id="quiz-list-empty" style="font-size:13px; color:var(--muted);">まだクイズセットがありません。</div>
-    </div>
-
-    <h2>参加者管理（ニックネーム設定）</h2>
-    <div class="card" id="nickname-card">
-      <p style="font-size:13px; color:var(--muted); margin-top:0;">接続IPごとにニックネームを設定できます。設定すると、下のログ一覧でIPアドレスと併せて表示されます。</p>
-      <div id="nickname-list"></div>
-      <div id="nickname-empty" style="font-size:13px; color:var(--muted); display:none;">まだ記録された接続IPがありません。</div>
-    </div>
-
-    <h2>ユーザー解答・アクセス状況（IP・進捗ログ）</h2>
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-      <div class="row" style="margin-top:0;">
-        <button id="view-mode-ip" class="view-mode-btn active">🌐 IPごとにグループ化 &amp; 統計</button>
-        <button id="view-mode-all" class="view-mode-btn">📋 全時系列ログ</button>
+    <details class="admin-section" open>
+      <summary>登録済みクイズセット</summary>
+      <div class="card" id="quiz-list-card">
+        <div id="quiz-list"></div>
+        <div id="quiz-list-empty" style="font-size:13px; color:var(--muted);">まだクイズセットがありません。</div>
       </div>
-      <div class="row" style="margin-top:0; gap:8px;">
-        <button id="refresh-logs-btn" style="padding:6px 12px; font-size:13px; min-height:36px;">最新状態に更新</button>
-        <button id="clear-logs-btn" class="danger" style="padding:6px 12px; font-size:13px; min-height:36px;">🗑️ 全ログを削除</button>
+    </details>
+
+    <details class="admin-section">
+      <summary>お知らせ編集（トップページの🔔から見られる内容）</summary>
+      <div class="card" id="announcement-card">
+        <p style="font-size:13px; color:var(--muted); margin-top:0;">ここに書いた内容が、クイズトップページ右上の🔔ボタンから見られる「お知らせ」として全ユーザーに表示されます。</p>
+        <label for="announcement-input">お知らせ本文</label>
+        <textarea id="announcement-input" style="font-family:inherit; height:140px;" placeholder="例: 2026/07/29 復習モードを追加しました。"></textarea>
+        <div class="row">
+          <button class="primary" id="announcement-save-btn">保存する</button>
+        </div>
+        <div id="announcement-error" style="color:var(--danger); font-size:14px; margin-top:8px; white-space:pre-wrap; font-weight:bold;"></div>
+        <div id="announcement-status" style="color:var(--accent-dark); font-size:14px; margin-top:8px; font-weight:bold;"></div>
       </div>
-    </div>
+    </details>
 
-    <div id="logs-container">
-      <div class="card" style="text-align:center; color:var(--muted); padding:20px;">ログイン後に表示されます。</div>
-    </div>
+    <details class="admin-section">
+      <summary>参加者管理（ニックネーム設定）</summary>
+      <div class="card" id="nickname-card">
+        <p style="font-size:13px; color:var(--muted); margin-top:0;">接続IPごとにニックネームを設定できます。設定すると、下のログ一覧でIPアドレスと併せて表示されます。</p>
+        <div id="nickname-list"></div>
+        <div id="nickname-empty" style="font-size:13px; color:var(--muted); display:none;">まだ記録された接続IPがありません。</div>
+      </div>
+    </details>
 
-    <h2 id="form-title">新しいクイズセットを追加</h2>
-    <div class="card">
-      <label for="title-input">タイトル</label>
-      <input type="text" id="title-input" placeholder="例: 地理クイズ">
-      <label for="category-input">カテゴリ（教科）</label>
-      <input type="text" id="category-input" list="category-list" placeholder="例: 国語、数学、歴史（未入力の場合は「未分類」）">
-      <datalist id="category-list"></datalist>
-      <label for="questions-input">問題（JSON配列: question と answer を持つオブジェクト）</label>
-      <textarea id="questions-input">[
+    <details class="admin-section">
+      <summary>ユーザー解答・アクセス状況（IP・進捗ログ）</summary>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+        <div class="row" style="margin-top:0;">
+          <button id="view-mode-ip" class="view-mode-btn active">🌐 IPごとにグループ化 &amp; 統計</button>
+          <button id="view-mode-all" class="view-mode-btn">📋 全時系列ログ</button>
+        </div>
+        <div class="row" style="margin-top:0; gap:8px;">
+          <button id="refresh-logs-btn" style="padding:6px 12px; font-size:13px; min-height:36px;">最新状態に更新</button>
+          <button id="clear-logs-btn" class="danger" style="padding:6px 12px; font-size:13px; min-height:36px;">🗑️ 全ログを削除</button>
+        </div>
+      </div>
+
+      <div id="logs-container">
+        <div class="card" style="text-align:center; color:var(--muted); padding:20px;">ログイン後に表示されます。</div>
+      </div>
+    </details>
+
+    <details class="admin-section">
+      <summary id="form-title">新しいクイズセットを追加</summary>
+      <div class="card">
+        <label for="title-input">タイトル</label>
+        <input type="text" id="title-input" placeholder="例: 地理クイズ">
+        <label for="category-input">カテゴリ（教科）</label>
+        <input type="text" id="category-input" list="category-list" placeholder="例: 国語、数学、歴史（未入力の場合は「未分類」）">
+        <datalist id="category-list"></datalist>
+        <label for="questions-input">問題（JSON配列: question と answer を持つオブジェクト）</label>
+        <textarea id="questions-input">[
   { "question": "日本の首都は？", "answer": "東京" },
   { "question": "富士山がある都道府県は？（2つのうち1つ）", "answer": "静岡県・山梨県" }
 ]</textarea>
-      <div class="row">
-        <button class="primary" id="save-btn">追加する</button>
-        <button id="cancel-edit-btn" style="display:none;">編集をキャンセル</button>
+        <div class="row">
+          <button class="primary" id="save-btn">追加する</button>
+          <button id="cancel-edit-btn" style="display:none;">編集をキャンセル</button>
+        </div>
+        <div id="error"></div>
+        <div id="status-msg"></div>
       </div>
-      <div id="error"></div>
-      <div id="status-msg"></div>
-    </div>
+    </details>
   </div>
 
 </div>
@@ -292,6 +335,7 @@ async function login() {
     await loadQuizList();
     await loadNicknames();
     await loadUserLogs();
+    await loadAnnouncement();
   } catch (e) {
     loginError.textContent = '認証通信エラー: ' + e.message;
   } finally {
@@ -299,6 +343,48 @@ async function login() {
     loginBtn.textContent = 'ログイン';
   }
 }
+
+async function loadAnnouncement() {
+  const errorEl = document.getElementById('announcement-error');
+  const statusEl = document.getElementById('announcement-status');
+  errorEl.textContent = '';
+  statusEl.textContent = '';
+  try {
+    const res = await fetch('/api/announcement');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    document.getElementById('announcement-input').value = data.content || '';
+  } catch (e) {
+    errorEl.textContent = 'お知らせの取得に失敗しました:\n' + e.message;
+  }
+}
+
+document.getElementById('announcement-save-btn').addEventListener('click', async () => {
+  const errorEl = document.getElementById('announcement-error');
+  const statusEl = document.getElementById('announcement-status');
+  errorEl.textContent = '';
+  statusEl.textContent = '';
+  const content = document.getElementById('announcement-input').value;
+  const btn = document.getElementById('announcement-save-btn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/announcement', {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ content }),
+    });
+    if (res.status === 401) {
+      errorEl.textContent = 'パスワードが違うため保存できませんでした。';
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    statusEl.textContent = '保存しました。';
+  } catch (e) {
+    errorEl.textContent = '保存に失敗しました:\n' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 let currentLogs = [];
 let activeLogMode = 'ip'; // 'ip' | 'all'
@@ -866,6 +952,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         await loadQuizList();
         await loadNicknames();
         await loadUserLogs();
+        await loadAnnouncement();
       } else {
         sessionStorage.removeItem('quizAdminPassword');
       }

@@ -245,6 +245,37 @@
     border-bottom: 1px solid var(--border);
   }
   .modal-title { font-size: 16px; font-weight: 700; }
+  .top-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .top-header-row h1 { margin: 0; }
+  .announce-btn {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    border-radius: 50%;
+    font-size: 20px;
+    padding: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .announce-btn .announce-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--danger);
+    border: 2px solid var(--card);
+    display: none;
+  }
+  .announce-btn.has-unread .announce-dot { display: block; }
+  .announce-body { font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
   .qlist-item { border-bottom: 1px solid var(--border); padding: 12px 0; cursor: pointer; }
   .qlist-item:last-child { border-bottom: none; }
   .qlist-item.qlist-current { background: var(--accent-light); border-radius: 8px; padding: 12px; margin: 0 -12px; border-bottom-color: transparent; }
@@ -317,7 +348,10 @@
 <div class="wrap">
 
   <div id="setup-screen">
-    <h1>クイズ</h1>
+    <div class="top-header-row">
+      <h1>クイズ</h1>
+      <button id="announce-btn" class="announce-btn" title="お知らせ">🔔<span class="announce-dot"></span></button>
+    </div>
 
     <div id="resume-banner" style="display:none; background:#fff8e1; border:1px solid #e0c46c; border-radius:8px; padding:14px; margin-bottom:16px; font-size:14px;">
       <div id="resume-text">前回の続きがあります。</div>
@@ -417,8 +451,18 @@
   </div>
 </div>
 
+<div id="announce-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">🔔 お知らせ</div>
+      <button id="announce-close" class="btn-subtle">✕ 閉じる</button>
+    </div>
+    <div id="announce-body" class="announce-body">読み込み中...</div>
+  </div>
+</div>
+
 <script>
-const APP_VERSION = '2026-07-29-1';
+const APP_VERSION = '2026-07-29-2';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -753,6 +797,43 @@ async function openQuizSet(id, title) {
 }
 
 loadQuizSetList();
+
+const ANNOUNCE_SEEN_KEY = 'quizAppAnnouncementSeenAt';
+let latestAnnouncement = { content: '', updatedAt: null };
+
+async function loadAnnouncement() {
+  try {
+    const res = await fetch('/api/announcement');
+    if (!res.ok) return;
+    latestAnnouncement = await res.json();
+    const seenAt = localStorage.getItem(ANNOUNCE_SEEN_KEY);
+    const hasUnread = !!latestAnnouncement.updatedAt && latestAnnouncement.content
+      && latestAnnouncement.updatedAt !== seenAt;
+    document.getElementById('announce-btn').classList.toggle('has-unread', !!hasUnread);
+  } catch (e) {
+    // お知らせが取得できなくても致命的ではない
+  }
+}
+
+document.getElementById('announce-btn').addEventListener('click', () => {
+  const body = document.getElementById('announce-body');
+  body.textContent = latestAnnouncement.content || 'お知らせはまだありません。';
+  document.getElementById('announce-modal').style.display = 'flex';
+  document.getElementById('announce-btn').classList.remove('has-unread');
+  if (latestAnnouncement.updatedAt) {
+    try {
+      localStorage.setItem(ANNOUNCE_SEEN_KEY, latestAnnouncement.updatedAt);
+    } catch (e) {
+      // 既読状態が保存できなくても致命的ではない
+    }
+  }
+});
+
+document.getElementById('announce-close').addEventListener('click', () => {
+  document.getElementById('announce-modal').style.display = 'none';
+});
+
+loadAnnouncement();
 
 document.getElementById('shuffle-toggle').addEventListener('click', () => {
   shuffleOn = !shuffleOn;

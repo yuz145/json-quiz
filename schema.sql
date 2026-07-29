@@ -46,3 +46,10 @@ CREATE TABLE IF NOT EXISTS ip_nicknames (
   nickname TEXT,
   updated_at TEXT NOT NULL
 );
+
+-- トップページ右上の🔔ボタンから見られる「お知らせ」。常に1行のみ（id=1固定でUPSERT）。
+CREATE TABLE IF NOT EXISTS announcement (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  content TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);

@@ -19,6 +19,7 @@
 - スマートフォン表示の全画面レスポンシブ最適化（適切なタップエリア、フォームズーム防止、iPhoneのDynamic Island/ノッチ対応など）
 - 間違えた問題だけをもう一度出題する「復習モード」
 - サーバーへの進捗保存は「3問解答するごと」「タブを閉じる/切り替えるなどページを離れる瞬間（`navigator.sendBeacon`）」「クイズ終了時」のハイブリッド方式。毎問ごとの書き込みを避けつつ、途中離脱時も直近の状態を取りこぼさない
+- トップページ右上の🔔ボタンから「お知らせ」を確認可能（`GET /api/announcement`）。管理画面の「お知らせ編集」セクションから内容を更新でき（`PUT /api/announcement`、管理者のみ）、内容が更新された（かつ一度も開いていない）場合のみ🔔に赤い未読ドットが表示される。一度でも開けば既読になり、次に内容が更新されるまでドットは出ない
 
 ## 使い方
 
@@ -83,6 +84,8 @@ functions/
     admin/progress.js        GET  /api/admin/progress     管理者専用: ユーザー解答・IPアクセスログ一覧取得
                               DELETE /api/admin/progress  管理者専用: 全アクセス・解答ログを一括全削除
     admin/rdns.js             GET  /api/admin/rdns?ip=xxx  管理者専用: 外部DNS-over-HTTPS APIでIPアドレスを逆引き（オンデマンド）
+    announcement.js           GET  /api/announcement       トップページの🔔から見る「お知らせ」取得（認証不要）
+                              PUT  /api/announcement       お知らせ内容を更新（管理者のみ）
 ```
 
 このプロジェクトはKVを使用せず、Cloudflare D1（SQLiteベースのマネージドDB）にデータを保存します。D1バインディング（`DB`）は`wrangler.toml`に定義していますが、Gitに接続した本番のPagesプロジェクトではCloudflareダッシュボードのプロジェクト設定画面（Settings → Functions → D1 database bindings）側の設定が優先されます。環境変数（`ADMIN_PASSWORD`）もダッシュボード（Settings → Environment variables）で設定します。
@@ -96,6 +99,7 @@ functions/
 | `quizzes` | クイズセット本体。`id`（主キー）, `title`, `category`, `questions`（JSON文字列）, `created_at`, `updated_at` |
 | `progress` | デバイスごとの進捗。`(quiz_id, device_id)` の複合主キー。`ip`, `country`, `region`, `city`, `idx`, `order_json`, `correct`, `best_correct`, `wrong`, `wrong_indices_json`, `mode`, `answer_mode`, `shuffle_on`, `completed`, `updated_at` |
 | `ip_nicknames` | IPアドレスに管理者が付けたニックネーム。`ip`（主キー）, `nickname`, `updated_at` |
+| `announcement` | トップページの🔔から見る「お知らせ」。常に1行のみ（`id`は1固定）。`content`, `updated_at` |
 
 - `category` を省略してクイズセットを作成・更新した場合は `未分類` として扱われます
 - クイズセット一覧の「問題数」は保存された値ではなく、取得時に `json_array_length(questions)` で都度計算しています
