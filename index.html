@@ -462,7 +462,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2026-07-29-3';
+const APP_VERSION = '2026-07-29-4';
 (function enforceLatestVersion() {
   const VERSION_KEY = 'quizAppVersion';
   let storedVersion;
@@ -821,12 +821,13 @@ async function loadAnnouncement() {
     if (!res.ok) return;
     latestAnnouncement = await res.json();
     const seenAt = localStorage.getItem(ANNOUNCE_SEEN_KEY);
-    const hasUnread = !!latestAnnouncement.updatedAt && latestAnnouncement.content
-      && latestAnnouncement.showDot
+    // このデバイスでまだ見ていない内容か（=更新日時が既読記録と異なるか）
+    const isUnseen = !!latestAnnouncement.updatedAt && latestAnnouncement.content
       && latestAnnouncement.updatedAt !== seenAt;
-    document.getElementById('announce-btn').classList.toggle('has-unread', !!hasUnread);
-    if (latestAnnouncement.important && latestAnnouncement.content) {
-      // 「大事なお知らせ」がONの場合、トップページを開いた瞬間に自動でモーダルを表示する
+    document.getElementById('announce-btn').classList.toggle('has-unread', !!(isUnseen && latestAnnouncement.showDot));
+    if (latestAnnouncement.important && isUnseen) {
+      // 「大事なお知らせ」がONの場合、まだ見ていない内容に限り開いた瞬間に自動表示する
+      // （一度見れば赤点と同様に既読扱いになり、次にリロードしても再表示されない）
       openAnnounceModal();
     }
   } catch (e) {
